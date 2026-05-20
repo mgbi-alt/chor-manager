@@ -1275,7 +1275,7 @@ let evFilter={chor:''};
 
 async function renderEvents(){
   const[{data},{data:placeholders}]=await Promise.all([
-    SB.from('events').select('*,event_program(position,song_id,songs(title,besetzung))').order('datum'),
+    SB.from('events').select('*,event_program(position,song_id,placeholder,songs(title,besetzung))').order('datum'),
     SB.from('event_program').select('placeholder,events(id,title,datum)').not('placeholder','is',null).order('events(datum)',{ascending:false})
   ]);
   cachedEvents=data||[];

@@ -314,7 +314,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <button class="btn btn-ic" id="song-add-btn" onclick="openSongForm()" style="display:none">+</button>
         </div>
       </div>
-      <div class="sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Titel, Komponist, Person…" oninput="filterSongs()" id="song-search"></div>
+      <div class="sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Titel, Komponist, Person…" oninput="filterSongs()" id="song-search"><button onclick="clearSongSearch()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px;line-height:1" title="Suche zurücksetzen">×</button></div>
       <div class="filter-toggle" id="filter-toggle-btn" onclick="toggleFilters()">
         <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
         <span>Filter</span>
@@ -335,7 +335,7 @@ textarea.fi{resize:vertical;min-height:70px;}
           <input type="file" id="ev-xl-file" accept=".xlsx,.csv" style="display:none" onchange="importEventsXLS(event)">
         </div>
       </div>
-      <div class="sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Titel, Chor, Thema…" oninput="filterEvents()" id="ev-search"></div>
+      <div class="sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Titel, Chor, Thema…" oninput="filterEvents()" id="ev-search"><button onclick="clearEvSearch()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px;line-height:1" title="Suche zurücksetzen">×</button></div>
       <div class="frow" id="ev-filters"></div>
       <div id="ev-placeholders" style="display:none;margin-bottom:10px"></div>
       <button id="ev-ph-btn" onclick="togglePlaceholders()" style="display:none;width:100%;margin-bottom:10px" class="btn btn-g btn-sm"></button>
@@ -929,7 +929,16 @@ function updateFilterCount(){
   const countEl=document.getElementById('filter-active-count');
   if(countEl){countEl.textContent=active;countEl.style.display=active?'':'none';}
 }
-function filterSongs(){displaySongs(filteredSongs());updateFilterCount();}
+function clearSongSearch(){
+  document.getElementById('song-search').value='';
+  songFilter={search:'',besetzung:'',thema:'',anlass:'',person:''};
+  buildFilters();displaySongs(filteredSongs());updateFilterCount();
+}
+function clearEvSearch(){
+  document.getElementById('ev-search').value='';
+  evFilter={chor:''};
+  buildEvFilters();displayEvents(filteredEvents());
+}
 function displaySongs(songs){
   const el=document.getElementById('song-list');
   const countEl=document.getElementById('song-count');
@@ -1356,7 +1365,7 @@ function displayEvents(data){
   el.innerHTML=html;
 }
 function evCard(e){
-  const n=(e.event_program||[]).filter(p=>p.song_id||p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]')).length;
+  const n=(e.event_program||[]).filter(p=>p.song_id||(p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]'))).length;
   return`<div class="card" onclick="openEvDetail('${e.id}')">
     <div class="crow"><div style="flex:1"><div class="ct">${esc(e.title)}</div><div class="cs">${fD(e.datum)}${e.uhrzeit?' · '+fT(e.uhrzeit):''} · ${esc(e.ort||'')}</div></div>
     <div>${n?`<span class="badge blue">${n} Lieder</span>`:''}</div></div>

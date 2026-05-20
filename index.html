@@ -1356,7 +1356,7 @@ function displayEvents(data){
   el.innerHTML=html;
 }
 function evCard(e){
-  const n=(e.event_program||[]).filter(p=>p.song_id||(p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]'))).length;
+  const n=(e.event_program||[]).filter(p=>p.song_id||p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]')).length;
   return`<div class="card" onclick="openEvDetail('${e.id}')">
     <div class="crow"><div style="flex:1"><div class="ct">${esc(e.title)}</div><div class="cs">${fD(e.datum)}${e.uhrzeit?' · '+fT(e.uhrzeit):''} · ${esc(e.ort||'')}</div></div>
     <div>${n?`<span class="badge blue">${n} Lieder</span>`:''}</div></div>

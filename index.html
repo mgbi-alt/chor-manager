@@ -3554,8 +3554,8 @@ async function importDbPdf(evt){
     log('PDF hat '+totalPages+' Seiten.');
 
     // Step 2: Analyse in chunks of 50 pages with 5-page overlap
-    const CHUNK=30;
-    const OVERLAP=3;
+    const CHUNK=20;
+    const OVERLAP=2;
     const allSongs=[];
     const numChunks=Math.ceil(totalPages/CHUNK);
 

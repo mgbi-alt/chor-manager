@@ -3573,15 +3573,27 @@ async function importDbPdf(evt){
       const chunkBytes=await chunkDoc.save();
       const chunkBase64=await toBase64(chunkBytes);
 
-      const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' aus einem Liederbuch (Gesamtseiten: '+totalPages+').'
+
+      const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' aus einem Chorliederbuch (Gesamtseiten: '+totalPages+').'
         +(ci>0?' Die ersten '+OVERLAP+' Seiten ueberlappen mit dem vorherigen Abschnitt - nur Lieder aufnehmen die auf Seite '+pageFrom+' oder spaeter BEGINNEN.':'')
-        +'\nExtrahiere alle vollstaendigen Lieder. Ueberspringe: Titelblatt, Inhaltsverzeichnis, Abschnittsseiten, Trennseiten.'
-        +(isLast?'':'\nLieder die am Ende dieses Abschnitts noch nicht abgeschlossen sind NICHT aufnehmen - sie erscheinen im naechsten Chunk vollstaendig.')
-        +'\nAntworte NUR mit JSON-Array, kein Markdown:'
-        +'\n[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]'
-        +'\nWichtig: seite_von/seite_bis sind die GLOBALEN Seitennummern im Gesamtdokument (beginnt bei 1).'
-        +'\nFelder nicht gefunden = leer lassen.';
-      const raw=await callClaude(chunkBase64,prompt);
+        +'\nExtrahiere alle vollstaendigen Lieder. Ueberspringe: Titelblatt, Inhaltsverzeichnis, Abschnittsseiten, Trennseiten, leere Seiten.'
+        +(isLast?'':'\nLieder die am Ende dieses Abschnitts noch nicht abgeschlossen sind NICHT aufnehmen.')
+        +'\nFeldregeln:\n'
+        +'- liedanfang: Erster gesungener Textvers (nicht Titel/Ueberschrift)\n'
+        +'- titel: Ueberschrift/Titel des Liedes (oft gross geschrieben oben auf der Seite)\n'
+        +'- komponist: NUR wenn explizit als Komponist/Musik/Melodie bezeichnet - NICHT den Arrangeur/Satz\n'
+        +'- arrangeur: Person bei Satz/Arr./Chorsatz/Arrangement\n'
+        +'- textdichter: Person bei Text/Words/Dichter\n'
+        +'- uebersetzer: Person bei Uebersetz./Uebertragung/Deutscher Text\n'
+        +'- besetzung: Stimmbesetzung aus Notenbild erkennen (SATB=4 Stimmen gemischt, TTBB=Maennerchor, SSA=Frauenchor) oder aus Text\n'
+        +'- bibelstelle: Bibelvers der angegeben ist (z.B. Psalm 23, Joh 3,16)\n'
+        +'- quelle: Liederbuch-Angabe am Ende der Seite (z.B. Jesu Name nie verklinget IV - 919)\n'
+        +'- rechte: Copyright-Zeile\n'
+        +'- thema: Thema des Liedes (z.B. Lob, Advent, Ostern, Trost)\n'
+        +'- anlass: Kirchlicher Anlass (z.B. Gottesdienst, Weihnachten, Abendmahl)\n'
+        +'\nAntworte NUR mit JSON-Array, kein Markdown:\n'
+        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]'
+        +'\nseite_von/seite_bis = GLOBALE Seitennummern im Gesamtdokument. Felder nicht gefunden = leer lassen.';
       const chunk_songs=parseJsonSongs(raw);
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');
       allSongs.push(...chunk_songs);
@@ -3605,7 +3617,7 @@ async function importDbPdf(evt){
         textdichter:s.textdichter||'',uebersetzer:s.uebersetzer||'',
         arrangeur:s.arrangeur||'',besetzung:s.besetzung||'',
         rechte:s.rechte||'',bibelstelle:s.bibelstelle||'',
-        thema:s.thema||'',anlass:s.anlass||'',
+        thema:s.thema||'',anlass:s.anlass||'',quelle:s.quelle||'',
         _seite_von:s.seite_von,_seite_bis:s.seite_bis,
         in_repertoire:false,created_by:currentUser.id
       });
@@ -3679,6 +3691,103 @@ async function importDbPdf(evt){
   }catch(e){log('Fehler: '+e.message,'err');console.error(e);}
 }
 
+async function reanalyzePdf(evt){
+  const file=evt.target.files[0];evt.target.value='';
+  if(!file)return;
+  const status=document.getElementById('db-pdf-status');
+  const log=(msg,type)=>{const d=document.createElement('div');d.style.cssText='font-size:12px;padding:3px 0;color:'+(type==='err'?'var(--danger)':type==='ok'?'var(--success)':'var(--text2)');d.textContent=msg;status.appendChild(d);status.scrollTop=status.scrollHeight;};
+  const setProgress=(pct)=>{let bar=document.getElementById('db-progress');if(!bar){bar=document.createElement('div');bar.id='db-progress';bar.style.cssText='margin:8px 0;background:rgba(255,255,255,.08);border-radius:4px;height:8px;overflow:hidden';bar.innerHTML='<div id="db-progress-inner" style="height:100%;background:var(--accent);border-radius:4px;transition:width .3s;width:0%"></div>';status.appendChild(bar);}document.getElementById('db-progress-inner').style.width=pct+'%';};
+  status.innerHTML='';
+  log('Lade PDF und DB-Lieder...');
+  try{
+    const PDFLib=await loadPdfLib();
+    const buf=await file.arrayBuffer();
+    const srcPdf=await PDFLib.PDFDocument.load(buf);
+    const totalPages=srcPdf.getPageCount();
+    log('PDF: '+totalPages+' Seiten');
+
+    // Load all DB songs that have page info stored in song_files or need correction
+    const{data:dbSongs}=await SB.from('songs').select('id,liedanfang,titel:title,komponist,textdichter,uebersetzer,arrangeur,besetzung,bibelstelle,quelle,thema,anlass,rechte').eq('in_repertoire',false).order('created_at');
+    if(!dbSongs?.length){log('Keine Datenbank-Lieder gefunden.','err');return;}
+    log(dbSongs.length+' DB-Lieder gefunden. Starte Nachkorrektur...');
+
+    // Process in chunks of 20 pages, match songs by liedanfang/titel
+    const CHUNK=20;const OVERLAP=2;
+    const numChunks=Math.ceil(totalPages/CHUNK);
+    const updates={};// id -> updated fields
+
+    for(let ci=0;ci<numChunks;ci++){
+      const pageFrom=ci*CHUNK+1;
+      const pageTo=Math.min(ci*CHUNK+CHUNK+OVERLAP,totalPages);
+      setProgress(Math.round(ci/numChunks*80));
+      log('Analysiere Seiten '+pageFrom+'-'+pageTo+' ('+( ci+1)+'/'+numChunks+')...');
+
+      const chunkDoc=await PDFLib.PDFDocument.create();
+      const idxs=Array.from({length:pageTo-pageFrom+1},(_,i)=>pageFrom-1+i);
+      const pages=await chunkDoc.copyPages(srcPdf,idxs);
+      pages.forEach(p=>chunkDoc.addPage(p));
+      const chunkBytes=await chunkDoc.save();
+      const chunkBase64=await toBase64(chunkBytes);
+
+      const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' eines Chorliederbuchs.\n'
+        +'Extrahiere alle Lieder mit moeglichst vollstaendigen Daten. Ueberspringe Titelblatt, Inhaltsverzeichnis, Abschnittsseiten.\n'
+        +'Feldregeln:\n'
+        +'- liedanfang: Erster gesungener Textvers\n'
+        +'- titel: Ueberschrift oben auf der Seite\n'
+        +'- komponist: NUR bei expliziter Angabe Melodie/Musik/Komponist (nicht Arrangeur/Satz)\n'
+        +'- arrangeur: Person bei Satz/Arr./Chorsatz\n'
+        +'- textdichter: Person bei Text/Words\n'
+        +'- uebersetzer: Person bei Uebersetz./Deutscher Text\n'
+        +'- besetzung: Aus Notenbild (SATB=4 Stimmen gemischt, TTBB=Maennerchor, SSA=Frauenchor)\n'
+        +'- bibelstelle: Bibelvers auf der Seite\n'
+        +'- quelle: Liederbuch-Angabe am Seitenende\n'
+        +'- rechte: Copyright-Zeile\n'
+        +'- thema: Thema des Liedes\n'
+        +'- anlass: Kirchlicher Anlass\n'
+        +'Antworte NUR mit JSON-Array:\n'
+        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]\n'
+        +'seite_von/seite_bis = globale Seitennummern. Felder nicht gefunden = leer lassen.';
+
+      const raw=await callClaude(chunkBase64,prompt);
+      const chunkSongs=parseJsonSongs(raw);
+
+      // Match each found song to existing DB songs
+      for(const cs of chunkSongs){
+        const csTitle=(cs.liedanfang||cs.titel||'').toLowerCase().trim();
+        const match=dbSongs.find(s=>{
+          const st=(s.liedanfang||s.titel||'').toLowerCase().trim();
+          return st===csTitle||st.includes(csTitle)||csTitle.includes(st);
+        });
+        if(!match)continue;
+        // Build update with only improved/missing fields
+        const upd={};
+        const fields=['komponist','textdichter','uebersetzer','arrangeur','besetzung','bibelstelle','quelle','rechte','thema','anlass','originaltitel'];
+        fields.forEach(f=>{
+          const newVal=(cs[f]||'').trim();
+          const oldVal=(match[f]||'').trim();
+          // Update if new value is better: field was empty OR new value is longer/more specific
+          if(newVal&&(!oldVal||newVal.length>oldVal.length))upd[f]=newVal;
+        });
+        if(Object.keys(upd).length>0)updates[match.id]=upd;
+      }
+    }
+
+    log('Aktualisiere '+Object.keys(updates).length+' Lieder...');
+    setProgress(85);
+    let updated=0;
+    for(const[id,upd] of Object.entries(updates)){
+      const{error}=await SB.from('songs').update(upd).eq('id',id);
+      if(!error)updated++;
+    }
+
+    const{data:ns}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false});
+    if(ns)cachedSongs=ns;
+    setProgress(100);
+    log('Fertig! '+updated+' Lieder aktualisiert.','ok');
+    updateSourceBtn();
+  }catch(e){log('Fehler: '+e.message,'err');console.error(e);}
+}
+
 async function renderSettings(tab='members'){
   if(currentProfile?.role!=='admin'){document.getElementById('settings-body').innerHTML='<p style="color:var(--text2)">Nur für Admins.</p>';return;}
   const tabs=`<div class="view-tabs" style="margin-bottom:16px">
@@ -3710,7 +3819,16 @@ async function renderSettings(tab='members'){
         <div id="ev-import-status" style="margin-top:8px;font-size:12px"></div>
       </div>
       <div class="st" style="margin-top:16px">Liederdatenbank – PDF importieren</div>
-      <div class="card" style="cursor:default"><div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div><input type="file" id="db-pdf-input" accept=".pdf" style="display:none" onchange="importDbPdf(event)"><button class="btn btn-p" style="width:100%" onclick="document.getElementById('db-pdf-input').click()">PDF hochladen &amp; analysieren</button><div id="db-pdf-status" style="margin-top:10px;max-height:200px;overflow-y:auto"></div></div>
+      <div class="card" style="cursor:default">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div>
+        <input type="file" id="db-pdf-input" accept=".pdf" style="display:none" onchange="importDbPdf(event)">
+        <button class="btn btn-p" style="width:100%;margin-bottom:8px" onclick="document.getElementById('db-pdf-input').click()">📄 PDF hochladen &amp; analysieren</button>
+        <div style="height:0.5px;background:var(--border);margin-bottom:8px"></div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Bereits importierte Lieder nachkorrigieren: Die gleiche PDF hochladen, Claude liest jede PDF-Seite erneut und aktualisiert fehlende/falsche Felder.</div>
+        <input type="file" id="db-pdf-reanalyze" accept=".pdf" style="display:none" onchange="reanalyzePdf(event)">
+        <button class="btn btn-g" style="width:100%" onclick="document.getElementById('db-pdf-reanalyze').click()">🔄 Bestehende Daten nachkorrigieren</button>
+        <div id="db-pdf-status" style="margin-top:10px;max-height:300px;overflow-y:auto"></div>
+      </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
         <div class="fr2">

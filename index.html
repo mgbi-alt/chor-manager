@@ -221,6 +221,10 @@ textarea.fi{resize:vertical;min-height:70px;}
 .toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card);border:0.5px solid var(--border2);border-radius:24px;padding:9px 18px;font-size:13px;color:var(--text);opacity:0;transition:all .3s;z-index:300;white-space:nowrap;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 ::-webkit-scrollbar{width:0;}
+#song-list::-webkit-scrollbar,#ev-list::-webkit-scrollbar,#content::-webkit-scrollbar{width:4px;}
+#song-list::-webkit-scrollbar-track,#ev-list::-webkit-scrollbar-track,#content::-webkit-scrollbar-track{background:transparent;}
+#song-list::-webkit-scrollbar-thumb,#ev-list::-webkit-scrollbar-thumb,#content::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px;}
+#song-list::-webkit-scrollbar-thumb:hover,#ev-list::-webkit-scrollbar-thumb:hover,#content::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.25);}
 /* Stats */
 .srow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
 .scard{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r2);padding:12px;}
@@ -311,6 +315,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <h2>Repertoire <span id="song-count" style="font-size:13px;font-weight:400;color:var(--text3)"></span></h2>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ic" id="song-ai-btn" onclick="openSongAssistant()" title="KI-Assistent" style="display:none">✦</button>
+          <button class="btn btn-g btn-sm" id="song-source-btn" onclick="toggleSongSource()" title="Alle Quellen anzeigen" style="font-size:11px;white-space:nowrap">Alle Quellen</button>
           <button class="btn btn-ic" id="song-add-btn" onclick="openSongForm()" style="display:none">+</button>
         </div>
       </div>
@@ -598,6 +603,7 @@ let SB=null, currentUser=null, currentProfile=null;
 let cachedSongs=[], cachedCategories=[], calView='3month', calDate=new Date();
 let editSongId=null, editEvId=null, editCalId=null;
 let songFilter={search:'',besetzung:'',thema:'',anlass:'',person:''};
+let showAllSources=false;
 let mediaFilter='all';
 
 // ========== UTILS ==========
@@ -888,6 +894,24 @@ async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announc
 async function renderSongs(){
   const{data}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title');
   cachedSongs=data||[];buildFilters();displaySongs(filteredSongs());
+  updateSourceBtn();
+}
+function updateSourceBtn(){
+  const btn=document.getElementById('song-source-btn');
+  if(!btn)return;
+  const dbCount=cachedSongs.filter(s=>!s.in_repertoire).length;
+  if(dbCount===0){btn.style.display='none';return;}
+  btn.style.display='';
+  btn.textContent=showAllSources?'Nur Repertoire':'+ Datenbank ('+dbCount+')';
+  btn.style.background=showAllSources?'rgba(201,168,76,.15)':'';
+  btn.style.borderColor=showAllSources?'var(--accent)':'';
+  btn.style.color=showAllSources?'var(--accent2)':'';
+}
+function toggleSongSource(){
+  showAllSources=!showAllSources;
+  updateSourceBtn();
+  displaySongs(filteredSongs());
+  updateFilterCount();
 }
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
@@ -902,6 +926,8 @@ function buildFilters(){
 function filteredSongs(){
   const q=(document.getElementById('song-search')?.value||'').toLowerCase();
   return cachedSongs.filter(s=>{
+    // Hide db-only songs unless showAllSources is on
+    if(!showAllSources&&!s.in_repertoire)return false;
     if(q&&!['title','liedanfang','refrain','komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(q)))return false;
     if(songFilter.besetzung&&s.besetzung!==songFilter.besetzung)return false;
     if(songFilter.thema&&!(s.thema||'').split(',').map(t=>t.trim()).includes(songFilter.thema))return false;
@@ -909,7 +935,6 @@ function filteredSongs(){
     if(songFilter.person){const p=songFilter.person.toLowerCase();if(!['komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(p)))return false;}
     return true;
   }).sort((a,b)=>{
-    // Sort by liedanfang first, fallback to title
     const ka=(a.liedanfang||a.title||'').toLowerCase();
     const kb=(b.liedanfang||b.title||'').toLowerCase();
     return ka.localeCompare(kb,'de');
@@ -943,18 +968,21 @@ function clearEvSearch(){
 function displaySongs(songs){
   const el=document.getElementById('song-list');
   const countEl=document.getElementById('song-count');
-  if(countEl)countEl.textContent=`${songs.length} / ${cachedSongs.length}`;
+  const repCount=cachedSongs.filter(s=>s.in_repertoire).length;
+  if(countEl)countEl.textContent=songs.length+' / '+repCount+(showAllSources?' (inkl. Datenbank)':'');
   if(!songs.length){el.innerHTML='<div class="empty"><p>Keine Lieder gefunden</p></div>';return;}
   el.innerHTML=songs.map(s=>{
     const haupttext=s.liedanfang?`${esc(s.liedanfang)}${s.title&&s.title!==s.liedanfang?` <span style="color:var(--text3)">|</span> ${esc(s.title)}`:''}`:esc(s.title);
     const themen=(s.thema||'').split(',').map(t=>t.trim()).filter(Boolean);
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
-    return`<div class="card" onclick="openSongDetail('${s.id}')">
+    const isDbOnly=!s.in_repertoire;
+    return`<div class="card" onclick="openSongDetail('${s.id}')" style="${isDbOnly?'border-color:rgba(91,141,238,.2);background:rgba(91,141,238,.04)':''}">
       <div class="crow">
-        <div style="flex:1"><div class="ct">${haupttext}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
+        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?` <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>`:''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           ${s.besetzung?`<span class="badge">${esc(s.besetzung)}</span>`:''}
+          ${isDbOnly?`<span class="badge blue" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();addToRepertoire('${s.id}')">+ Ins Repertoire</span>`:''}
           ${allTags?`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:120px">${allTags}</div>`:''}
         </div>
       </div>
@@ -989,6 +1017,12 @@ async function openSongDetail(id){
     ${filesHtml}
     ${s.notizen?`<div class="ddiv"></div><div class="df" style="grid-column:1/-1"><div class="dl">Notizen</div><div class="dv">${esc(s.notizen)}</div></div>`:''}`;
   const footer=document.getElementById('sd-footer');footer.innerHTML='';
+  if(!s.in_repertoire){
+    const rb=document.createElement('button');rb.className='btn btn-p';rb.style.flex='2';
+    rb.textContent='+ Ins Repertoire aufnehmen';
+    rb.onclick=()=>{addToRepertoire(id);closeModal('m-song-detail');};
+    footer.appendChild(rb);
+  }
   if(isAdmin){
     const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='1';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-song-detail');openSongForm(id);};
     const db=document.createElement('button');db.className='btn btn-d';db.style.flex='1';db.textContent='Löschen';db.onclick=()=>{if(confirm('Löschen?'))delSong(id);};
@@ -1122,11 +1156,20 @@ async function saveSong(){
   const payload={title,liedanfang:document.getElementById('sf-anf').value.trim(),refrain:document.getElementById('sf-ref').value.trim(),besetzung:document.getElementById('sf-bes').value,thema:document.getElementById('sf-thema').value.trim(),anlass:document.getElementById('sf-anlass').value.trim(),bibelstelle:document.getElementById('sf-bibel').value.trim(),schrank:document.getElementById('sf-schrank').value,komponist:document.getElementById('sf-komp').value.trim(),komponist_lz:document.getElementById('sf-komp-lz').value.trim(),textdichter:document.getElementById('sf-text').value.trim(),textdichter_lz:document.getElementById('sf-text-lz').value.trim(),arrangeur:document.getElementById('sf-arr').value.trim(),arrangeur_lz:document.getElementById('sf-arr-lz').value.trim(),uebersetzer:document.getElementById('sf-ueb').value.trim(),uebersetzer_lz:document.getElementById('sf-ueb-lz').value.trim(),rechte:document.getElementById('sf-recht').value.trim(),lizenz:document.getElementById('sf-liz').value.trim(),originaltitel:document.getElementById('sf-orig').value.trim(),quelle:document.getElementById('sf-quelle').value.trim(),quelle_nr:document.getElementById('sf-quelle-nr').value.trim(),links:lv?[lv]:[],notizen:document.getElementById('sf-notiz').value.trim(),updated_at:new Date().toISOString()};
   let error;
   if(editSongId){({error}=await SB.from('songs').update(payload).eq('id',editSongId));}
-  else{({error}=await SB.from('songs').insert({...payload,created_by:currentUser.id}));}
+  else{({error}=await SB.from('songs').insert({...payload,in_repertoire:true,created_by:currentUser.id}));}
   if(error){T('Fehler: '+error.message,'err');return;}
   closeModal('m-song-form');renderSongs();T(editSongId?'Lied aktualisiert':'Lied hinzugefügt','ok');
 }
 async function delSong(id){await SB.from('songs').delete().eq('id',id);closeModal('m-song-detail');renderSongs();T('Lied gelöscht');}
+async function addToRepertoire(id){
+  const{error}=await SB.from('songs').update({in_repertoire:true}).eq('id',id);
+  if(error){T('Fehler: '+error.message,'err');return;}
+  const s=cachedSongs.find(x=>x.id===id);
+  if(s)s.in_repertoire=true;
+  T('✅ Ins Repertoire aufgenommen','ok');
+  displaySongs(filteredSongs());
+  updateSourceBtn();
+}
 
 // ========== CSV IMPORT/EXPORT ==========
 async function importCSV(event){
@@ -1285,15 +1328,29 @@ async function renderEvents(){
   // Show placeholder list
   const phEl=document.getElementById('ev-placeholders');
   const phBtn=document.getElementById('ev-ph-btn');
-  const phs=(placeholders||[]).filter(p=>p.placeholder);
+  // Only real song placeholders (no Predigt, no Sonstiges)
+  const rawPhs=(placeholders||[]).filter(p=>
+    p.placeholder &&
+    !p.placeholder.startsWith('[Predigt]') &&
+    !p.placeholder.startsWith('[Sonstiges]')
+  );
+  // Cumulate duplicates
+  const phMap={};
+  rawPhs.forEach(p=>{
+    const key=p.placeholder.trim();
+    if(!phMap[key])phMap[key]={placeholder:key,events:[],count:0};
+    if(p.events)phMap[key].events.push(p.events);
+    phMap[key].count++;
+  });
+  const phs=Object.values(phMap).sort((a,b)=>b.count-a.count);
   if(phs.length&&phEl&&phBtn){
     phBtn.style.display='';
     phBtn.textContent=`📌 ${phs.length} offene Platzhalter anzeigen`;
     window._phsHtml=`<div style="background:rgba(232,160,32,.08);border:0.5px solid rgba(232,160,32,.3);border-radius:var(--r2);padding:12px 14px">
       <div style="font-size:10px;font-weight:500;color:var(--warn);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">📌 Offene Platzhalter (${phs.length})</div>
       ${phs.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid rgba(232,160,32,.15);font-size:13px">
-        <span style="color:var(--text2)">? ${esc(p.placeholder)}</span>
-        <span style="font-size:11px;color:var(--text3);cursor:pointer" onclick="openEvDetail('${p.events?.id}')">${esc(p.events?.title||'')} · ${fD(p.events?.datum?.slice(0,10))}</span>
+        <span style="color:var(--text2)">? ${esc(p.placeholder)}${p.count>1?` <span class="badge warn" style="font-size:9px;margin-left:4px">${p.count}×</span>`:''}</span>
+        <span style="font-size:11px;color:var(--text3)">${p.events.slice(0,2).map(e=>`<span style="cursor:pointer" onclick="openEvDetail('${e?.id}')">${esc(e?.title||'')} · ${fD(e?.datum?.slice(0,10))}</span>`).join(', ')}${p.events.length>2?` +${p.events.length-2}`:''}</span>
       </div>`).join('')}
     </div>`;
     phEl.style.display='none';
@@ -1439,7 +1496,7 @@ async function setAtt(evId,mId,val){
 }
 async function openEventForm(id=null){
   editEvId=id;
-  const{data:songs}=await SB.from('songs').select('id,title,liedanfang').order('liedanfang',{nullsFirst:false}).order('title');
+  const{data:songs}=await SB.from('songs').select('id,title,liedanfang').eq('in_repertoire',true).order('liedanfang',{nullsFirst:false}).order('title');
   const{data:members}=await SB.from('profiles').select('id,name').order('name');
   let e={};
   if(id){const{data}=await SB.from('events').select('*,event_program(*),event_tasks(*)').eq('id',id).single();e=data||{};}
@@ -3200,7 +3257,7 @@ async function sastConfirmSong(){
     if(error){sastBot('Fehler: '+error.message);return;}
     sastBot('\u2705 Lied aktualisiert!');
   } else {
-    const{data:newSong,error}=await SB.from('songs').insert({...fields,created_by:currentUser.id}).select().single();
+    const{data:newSong,error}=await SB.from('songs').insert({...fields,in_repertoire:true,created_by:currentUser.id}).select().single();
     if(error){sastBot('Fehler: '+error.message);return;}
     songId=newSong.id;
     sastBot('\u2705 Lied aufgenommen!');

@@ -220,11 +220,7 @@ textarea.fi{resize:vertical;min-height:70px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card);border:0.5px solid var(--border2);border-radius:24px;padding:9px 18px;font-size:13px;color:var(--text);opacity:0;transition:all .3s;z-index:300;white-space:nowrap;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-::-webkit-scrollbar{width:0;}
-#song-list::-webkit-scrollbar,#ev-list::-webkit-scrollbar,#content::-webkit-scrollbar{width:4px;}
-#song-list::-webkit-scrollbar-track,#ev-list::-webkit-scrollbar-track,#content::-webkit-scrollbar-track{background:transparent;}
-#song-list::-webkit-scrollbar-thumb,#ev-list::-webkit-scrollbar-thumb,#content::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px;}
-#song-list::-webkit-scrollbar-thumb:hover,#ev-list::-webkit-scrollbar-thumb:hover,#content::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.25);}
+::-webkit-scrollbar{width:0;}#content::-webkit-scrollbar{width:4px;}#content::-webkit-scrollbar-track{background:transparent;}#content::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px;}#content::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.25);}
 /* Stats */
 .srow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
 .scard{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r2);padding:12px;}
@@ -315,7 +311,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         <h2>Repertoire <span id="song-count" style="font-size:13px;font-weight:400;color:var(--text3)"></span></h2>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ic" id="song-ai-btn" onclick="openSongAssistant()" title="KI-Assistent" style="display:none">✦</button>
-          <button class="btn btn-g btn-sm" id="song-source-btn" onclick="toggleSongSource()" title="Alle Quellen anzeigen" style="font-size:11px;white-space:nowrap">Alle Quellen</button>
+          <button class="btn btn-g btn-sm" id="song-source-btn" onclick="toggleSongSource()" style="font-size:11px;white-space:nowrap;display:none">+ Datenbank</button>
           <button class="btn btn-ic" id="song-add-btn" onclick="openSongForm()" style="display:none">+</button>
         </div>
       </div>
@@ -341,6 +337,7 @@ textarea.fi{resize:vertical;min-height:70px;}
         </div>
       </div>
       <div class="sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Titel, Chor, Thema…" oninput="filterEvents()" id="ev-search"><button onclick="clearEvSearch()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px;line-height:1" title="Suche zurücksetzen">×</button></div>
+      <div style="display:flex;gap:7px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><input type="date" class="fi" id="ev-from" style="flex:1;min-width:120px;padding:7px 10px;font-size:13px" oninput="filterEvents()" placeholder="Von"><span style="color:var(--text3);font-size:12px;flex-shrink:0">–</span><input type="date" class="fi" id="ev-to" style="flex:1;min-width:120px;padding:7px 10px;font-size:13px" oninput="filterEvents()" placeholder="Bis"><button onclick="clearEvDateFilter()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0">×</button></div>
       <div class="frow" id="ev-filters"></div>
       <div id="ev-placeholders" style="display:none;margin-bottom:10px"></div>
       <button id="ev-ph-btn" onclick="togglePlaceholders()" style="display:none;width:100%;margin-bottom:10px" class="btn btn-g btn-sm"></button>
@@ -893,26 +890,19 @@ async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announc
 // ========== SONGS ==========
 async function renderSongs(){
   const{data}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title');
-  cachedSongs=data||[];buildFilters();displaySongs(filteredSongs());
-  updateSourceBtn();
+  cachedSongs=data||[];buildFilters();displaySongs(filteredSongs());updateSourceBtn();
 }
 function updateSourceBtn(){
-  const btn=document.getElementById('song-source-btn');
-  if(!btn)return;
+  const btn=document.getElementById('song-source-btn');if(!btn)return;
   const dbCount=cachedSongs.filter(s=>!s.in_repertoire).length;
-  if(dbCount===0){btn.style.display='none';return;}
+  if(!dbCount){btn.style.display='none';return;}
   btn.style.display='';
   btn.textContent=showAllSources?'Nur Repertoire':'+ Datenbank ('+dbCount+')';
   btn.style.background=showAllSources?'rgba(201,168,76,.15)':'';
   btn.style.borderColor=showAllSources?'var(--accent)':'';
-  btn.style.color=showAllSources?'var(--accent2)':'';
+  btn.style.color=showAllSources?'var(--accent2)':'var(--text2)';
 }
-function toggleSongSource(){
-  showAllSources=!showAllSources;
-  updateSourceBtn();
-  displaySongs(filteredSongs());
-  updateFilterCount();
-}
+function toggleSongSource(){showAllSources=!showAllSources;updateSourceBtn();displaySongs(filteredSongs());updateFilterCount();}
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
   const the=[...new Set(cachedSongs.map(s=>s.thema).filter(Boolean))];
@@ -926,7 +916,6 @@ function buildFilters(){
 function filteredSongs(){
   const q=(document.getElementById('song-search')?.value||'').toLowerCase();
   return cachedSongs.filter(s=>{
-    // Hide db-only songs unless showAllSources is on
     if(!showAllSources&&!s.in_repertoire)return false;
     if(q&&!['title','liedanfang','refrain','komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(q)))return false;
     if(songFilter.besetzung&&s.besetzung!==songFilter.besetzung)return false;
@@ -965,10 +954,15 @@ function clearEvSearch(){
   evFilter={chor:''};
   buildEvFilters();displayEvents(filteredEvents());
 }
+function clearEvDateFilter(){
+  document.getElementById('ev-from').value='';
+  document.getElementById('ev-to').value='';
+  filterEvents();
+}
 function displaySongs(songs){
   const el=document.getElementById('song-list');
   const countEl=document.getElementById('song-count');
-  const repCount=cachedSongs.filter(s=>s.in_repertoire).length;
+  const repCount=cachedSongs.filter(s=>s.in_repertoire!==false).length;
   if(countEl)countEl.textContent=songs.length+' / '+repCount+(showAllSources?' (inkl. Datenbank)':'');
   if(!songs.length){el.innerHTML='<div class="empty"><p>Keine Lieder gefunden</p></div>';return;}
   el.innerHTML=songs.map(s=>{
@@ -976,10 +970,10 @@ function displaySongs(songs){
     const themen=(s.thema||'').split(',').map(t=>t.trim()).filter(Boolean);
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
-    const isDbOnly=!s.in_repertoire;
+    const isDbOnly=s.in_repertoire===false;
     return`<div class="card" onclick="openSongDetail('${s.id}')" style="${isDbOnly?'border-color:rgba(91,141,238,.2);background:rgba(91,141,238,.04)':''}">
       <div class="crow">
-        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?` <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>`:''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
+        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           ${s.besetzung?`<span class="badge">${esc(s.besetzung)}</span>`:''}
           ${isDbOnly?`<span class="badge blue" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();addToRepertoire('${s.id}')">+ Ins Repertoire</span>`:''}
@@ -1017,10 +1011,10 @@ async function openSongDetail(id){
     ${filesHtml}
     ${s.notizen?`<div class="ddiv"></div><div class="df" style="grid-column:1/-1"><div class="dl">Notizen</div><div class="dv">${esc(s.notizen)}</div></div>`:''}`;
   const footer=document.getElementById('sd-footer');footer.innerHTML='';
-  if(!s.in_repertoire){
+  if(s.in_repertoire===false){
     const rb=document.createElement('button');rb.className='btn btn-p';rb.style.flex='2';
     rb.textContent='+ Ins Repertoire aufnehmen';
-    rb.onclick=()=>{addToRepertoire(id);closeModal('m-song-detail');};
+    rb.onclick=()=>addToRepertoire(id);
     footer.appendChild(rb);
   }
   if(isAdmin){
@@ -1164,11 +1158,10 @@ async function delSong(id){await SB.from('songs').delete().eq('id',id);closeModa
 async function addToRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:true}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}
-  const s=cachedSongs.find(x=>x.id===id);
-  if(s)s.in_repertoire=true;
+  const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=true;
   T('✅ Ins Repertoire aufgenommen','ok');
-  displaySongs(filteredSongs());
-  updateSourceBtn();
+  closeModal('m-song-detail');
+  displaySongs(filteredSongs());updateSourceBtn();
 }
 
 // ========== CSV IMPORT/EXPORT ==========
@@ -1328,29 +1321,17 @@ async function renderEvents(){
   // Show placeholder list
   const phEl=document.getElementById('ev-placeholders');
   const phBtn=document.getElementById('ev-ph-btn');
-  // Only real song placeholders (no Predigt, no Sonstiges)
-  const rawPhs=(placeholders||[]).filter(p=>
-    p.placeholder &&
-    !p.placeholder.startsWith('[Predigt]') &&
-    !p.placeholder.startsWith('[Sonstiges]')
-  );
-  // Cumulate duplicates
-  const phMap={};
-  rawPhs.forEach(p=>{
-    const key=p.placeholder.trim();
-    if(!phMap[key])phMap[key]={placeholder:key,events:[],count:0};
-    if(p.events)phMap[key].events.push(p.events);
-    phMap[key].count++;
-  });
+  const rawPhs=(placeholders||[]).filter(p=>p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]'));
+  const phMap={};rawPhs.forEach(p=>{const k=p.placeholder.trim();if(!phMap[k])phMap[k]={placeholder:k,events:[],count:0};if(p.events)phMap[k].events.push(p.events);phMap[k].count++;});
   const phs=Object.values(phMap).sort((a,b)=>b.count-a.count);
   if(phs.length&&phEl&&phBtn){
     phBtn.style.display='';
     phBtn.textContent=`📌 ${phs.length} offene Platzhalter anzeigen`;
     window._phsHtml=`<div style="background:rgba(232,160,32,.08);border:0.5px solid rgba(232,160,32,.3);border-radius:var(--r2);padding:12px 14px">
       <div style="font-size:10px;font-weight:500;color:var(--warn);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">📌 Offene Platzhalter (${phs.length})</div>
-      ${phs.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid rgba(232,160,32,.15);font-size:13px">
-        <span style="color:var(--text2)">? ${esc(p.placeholder)}${p.count>1?` <span class="badge warn" style="font-size:9px;margin-left:4px">${p.count}×</span>`:''}</span>
-        <span style="font-size:11px;color:var(--text3)">${p.events.slice(0,2).map(e=>`<span style="cursor:pointer" onclick="openEvDetail('${e?.id}')">${esc(e?.title||'')} · ${fD(e?.datum?.slice(0,10))}</span>`).join(', ')}${p.events.length>2?` +${p.events.length-2}`:''}</span>
+      ${phs.map(p=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid rgba(232,160,32,.15);font-size:13px;gap:8px">
+        <span style="color:var(--text2)">? ${esc(p.placeholder)}${p.count>1?` <span class="badge warn" style="font-size:9px">${p.count}×</span>`:''}</span>
+        <span style="font-size:11px;color:var(--text3);text-align:right">${p.events.slice(0,2).map(e=>`<span style="cursor:pointer;display:block" onclick="openEvDetail('${e?.id||''}')">${esc(e?.title||'')} · ${fD((e?.datum||'').slice(0,10))}</span>`).join('')}${p.events.length>2?`<span style="color:var(--text3)">+${p.events.length-2}</span>`:''}</span>
       </div>`).join('')}
     </div>`;
     phEl.style.display='none';
@@ -1391,9 +1372,13 @@ function buildEvFilters(){
 
 function filteredEvents(){
   const q=(document.getElementById('ev-search')?.value||'').toLowerCase();
+  const from=document.getElementById('ev-from')?.value||'';
+  const to=document.getElementById('ev-to')?.value||'';
   return cachedEvents.filter(e=>{
     if(q&&!['title','chor','thema','ort','dirigent'].some(k=>(e[k]||'').toLowerCase().includes(q)))return false;
     if(evFilter.chor&&e.chor!==evFilter.chor)return false;
+    if(from&&e.datum&&e.datum<from)return false;
+    if(to&&e.datum&&e.datum>to)return false;
     return true;
   });
 }
@@ -3257,7 +3242,7 @@ async function sastConfirmSong(){
     if(error){sastBot('Fehler: '+error.message);return;}
     sastBot('\u2705 Lied aktualisiert!');
   } else {
-    const{data:newSong,error}=await SB.from('songs').insert({...fields,in_repertoire:true,created_by:currentUser.id}).select().single();
+    const{data:newSong,error}=await SB.from('songs').insert({...fields,created_by:currentUser.id}).select().single();
     if(error){sastBot('Fehler: '+error.message);return;}
     songId=newSong.id;
     sastBot('\u2705 Lied aufgenommen!');
@@ -3498,6 +3483,59 @@ async function processSastInfoPdf(lines,filename){
 }
 
 
+async function importDbPdf(evt){
+  const file=evt.target.files[0];evt.target.value='';
+  if(!file)return;
+  const status=document.getElementById('db-pdf-status');
+  const log=(msg,type)=>{const d=document.createElement('div');d.style.cssText='font-size:12px;padding:3px 0;color:'+(type==='err'?'var(--danger)':type==='ok'?'var(--success)':'var(--text2)');d.textContent=msg;status.appendChild(d);status.scrollTop=status.scrollHeight;};
+  status.innerHTML='';
+  log('Lese "'+file.name+'" ('+Math.round(file.size/1024)+' KB)...');
+  try{
+    const buf=await file.arrayBuffer();const bytes=new Uint8Array(buf);
+    let binary='';const chunk=8192;
+    for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+    const base64=btoa(binary);
+    log('KI analysiert PDF - kann 30-60 Sekunden dauern...');
+    const resp=await fetch(SB_URL+'/functions/v1/claude-proxy',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
+      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:8000,messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:'Diese PDF enthaelt mehrere Lieder. Extrahiere ALLE Lieder als JSON-Array. Antworte NUR mit dem Array, kein Markdown:\n[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","thema":"","anlass":"","seite_von":1,"seite_bis":1}]\nFelder nicht gefunden = leer lassen. seite_von/seite_bis = Seitennummern des Liedes.'}
+      ]}]})
+    });
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+    const data=await resp.json();
+    const raw=(data.content||[]).map(c=>c.text||'').join('');
+    let songs=[];
+    try{songs=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch{const m=raw.match(/\[[\s\S]+\]/);if(m)try{songs=JSON.parse(m[0]);}catch{}}
+    if(!songs?.length)throw new Error('Keine Lieder erkannt. Ist die PDF text-basiert (kein Scan)?');
+    log(songs.length+' Lieder erkannt - speichere in Datenbank...');
+    const{data:existing}=await SB.from('songs').select('liedanfang,title');
+    const existSet=new Set([...(existing||[]).map(s=>(s.liedanfang||'').toLowerCase().trim()),...(existing||[]).map(s=>(s.title||'').toLowerCase().trim())]);
+    const toInsert=[];
+    for(const s of songs){
+      if(!s.liedanfang&&!s.titel)continue;
+      const la=(s.liedanfang||s.titel||'').toLowerCase().trim();
+      const ti=(s.titel||s.liedanfang||'').toLowerCase().trim();
+      if(existSet.has(la)||existSet.has(ti))continue;
+      toInsert.push({title:s.titel||s.liedanfang||'',liedanfang:s.liedanfang||s.titel||'',originaltitel:s.originaltitel||'',komponist:s.komponist||'',textdichter:s.textdichter||'',uebersetzer:s.uebersetzer||'',arrangeur:s.arrangeur||'',besetzung:s.besetzung||'',rechte:s.rechte||'',bibelstelle:s.bibelstelle||'',thema:s.thema||'',anlass:s.anlass||'',in_repertoire:false,created_by:currentUser.id});
+      existSet.add(la);existSet.add(ti);
+    }
+    let inserted=0,errors=0;
+    for(let i=0;i<toInsert.length;i+=50){
+      const{error}=await SB.from('songs').insert(toInsert.slice(i,i+50));
+      if(error){for(const s of toInsert.slice(i,i+50)){const{error:e2}=await SB.from('songs').insert(s);if(e2)errors++;else inserted++;}}
+      else inserted+=Math.min(50,toInsert.length-i);
+      log('Gespeichert: '+inserted+'/'+toInsert.length+'...');
+    }
+    const skipped=songs.length-toInsert.length;
+    const{data:ns}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false});if(ns)cachedSongs=ns;
+    log('Fertig! '+inserted+' neue Lieder, '+skipped+' bereits vorhanden'+(errors?', '+errors+' Fehler':'')+(inserted<songs.length?'. Tipp: PDF in Teilen hochladen wenn Lieder fehlen':''),'ok');
+    updateSourceBtn();
+  }catch(e){log('Fehler: '+e.message,'err');console.error(e);}
+}
+
 async function renderSettings(tab='members'){
   if(currentProfile?.role!=='admin'){document.getElementById('settings-body').innerHTML='<p style="color:var(--text2)">Nur für Admins.</p>';return;}
   const tabs=`<div class="view-tabs" style="margin-bottom:16px">
@@ -3528,6 +3566,8 @@ async function renderSettings(tab='members'){
         <button class="btn btn-g" style="width:100%" onclick="document.getElementById('ev-import-file').click()">📄 Datei auswählen & importieren</button>
         <div id="ev-import-status" style="margin-top:8px;font-size:12px"></div>
       </div>
+      <div class="st" style="margin-top:16px">Liederdatenbank – PDF importieren</div>
+      <div class="card" style="cursor:default"><div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div><input type="file" id="db-pdf-input" accept=".pdf" style="display:none" onchange="importDbPdf(event)"><button class="btn btn-p" style="width:100%" onclick="document.getElementById('db-pdf-input').click()">PDF hochladen &amp; analysieren</button><div id="db-pdf-status" style="margin-top:10px;max-height:200px;overflow-y:auto"></div></div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
         <div class="fr2">

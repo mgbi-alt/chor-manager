@@ -3553,14 +3553,16 @@ async function importDbPdf(evt){
     const totalPages=srcPdf.getPageCount();
     log('PDF hat '+totalPages+' Seiten.');
 
-    // Step 2: Analyse in chunks of 150 pages
-    const CHUNK=150;
+    // Step 2: Analyse in chunks of 50 pages with 5-page overlap
+    const CHUNK=50;
+    const OVERLAP=5;
     const allSongs=[];
     const numChunks=Math.ceil(totalPages/CHUNK);
 
     for(let ci=0;ci<numChunks;ci++){
       const pageFrom=ci*CHUNK+1;
-      const pageTo=Math.min((ci+1)*CHUNK,totalPages);
+      const pageTo=Math.min(ci*CHUNK+CHUNK+OVERLAP,totalPages);
+      const isLast=pageTo>=totalPages;
       setProgress(Math.round(ci/numChunks*40),'KI analysiert Seiten '+pageFrom+'-'+pageTo+' (Teil '+(ci+1)+'/'+numChunks+')...');
 
       // Extract chunk pages into new PDF
@@ -3572,12 +3574,13 @@ async function importDbPdf(evt){
       const chunkBase64=await toBase64(chunkBytes);
 
       const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' aus einem Liederbuch (Gesamtseiten: '+totalPages+').'
+        +(ci>0?' Die ersten '+OVERLAP+' Seiten ueberlappen mit dem vorherigen Abschnitt - nur Lieder aufnehmen die auf Seite '+pageFrom+' oder spaeter BEGINNEN.':'')
         +'\nExtrahiere alle vollstaendigen Lieder. Ueberspringe: Titelblatt, Inhaltsverzeichnis, Abschnittsseiten, Trennseiten.'
+        +(isLast?'':'\nLieder die am Ende dieses Abschnitts noch nicht abgeschlossen sind NICHT aufnehmen - sie erscheinen im naechsten Chunk vollstaendig.')
         +'\nAntworte NUR mit JSON-Array, kein Markdown:'
         +'\n[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]'
         +'\nWichtig: seite_von/seite_bis sind die GLOBALEN Seitennummern im Gesamtdokument (beginnt bei 1).'
         +'\nFelder nicht gefunden = leer lassen.';
-
       const raw=await callClaude(chunkBase64,prompt);
       const chunk_songs=parseJsonSongs(raw);
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');

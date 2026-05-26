@@ -3579,7 +3579,7 @@ async function importDbPdf(evt){
         +'\nExtrahiere alle vollstaendigen Lieder. Ueberspringe: Titelblatt, Inhaltsverzeichnis, Abschnittsseiten, Trennseiten, leere Seiten.'
         +(isLast?'':'\nLieder die am Ende dieses Abschnitts noch nicht abgeschlossen sind NICHT aufnehmen.')
         +'\nFeldregeln:\n'
-        +'- liedanfang: Erster gesungener Textvers (nicht Titel/Ueberschrift)\n'
+        +'- liedanfang: Erste vollstaendige Textzeile des 1. Verses (oft identisch mit dem Titel). Beispiel: Titel "Der Du das All regierst" -> liedanfang "Der Du das All regierst" oder "Der Du das All regierst voll Herrlichkeit". Nimm die erste gesungene Zeile des ersten Verses.\n'
         +'- titel: Ueberschrift/Titel des Liedes (oft gross geschrieben oben auf der Seite)\n'
         +'- komponist: NUR wenn explizit als Komponist/Musik/Melodie bezeichnet - NICHT den Arrangeur/Satz\n'
         +'- arrangeur: Person bei Satz/Arr./Chorsatz/Arrangement\n'
@@ -3732,7 +3732,8 @@ async function reanalyzePdf(evt){
       const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' eines Chorliederbuchs.\n'
         +'Extrahiere alle Lieder mit moeglichst vollstaendigen Daten. Ueberspringe Titelblatt, Inhaltsverzeichnis, Abschnittsseiten.\n'
         +'Feldregeln:\n'
-        +'- liedanfang: Erster gesungener Textvers\n'
+        +'- titel: Ueberschrift/Titel des Liedes wie er oben auf der Seite steht\n'
+        +'- liedanfang: Die erste gesungene Textzeile des 1. Verses (kann gleich dem Titel sein oder abweichen). Beispiel: Titel = "Großer Gott", Liedanfang = "Großer Gott wir loben dich"\n'
         +'- titel: Ueberschrift oben auf der Seite\n'
         +'- komponist: NUR bei expliziter Angabe Melodie/Musik/Komponist (nicht Arrangeur/Satz)\n'
         +'- arrangeur: Person bei Satz/Arr./Chorsatz\n'
@@ -3753,20 +3754,28 @@ async function reanalyzePdf(evt){
 
       // Match each found song to existing DB songs
       for(const cs of chunkSongs){
-        const csTitle=(cs.liedanfang||cs.titel||'').toLowerCase().trim();
+        const csTitel=(cs.titel||'').toLowerCase().trim();
+        const csAnfang=(cs.liedanfang||'').toLowerCase().trim();
         const match=dbSongs.find(s=>{
-          const st=(s.liedanfang||s.titel||'').toLowerCase().trim();
-          return st===csTitle||st.includes(csTitle)||csTitle.includes(st);
+          const st=(s.titel||s.liedanfang||'').toLowerCase().trim();
+          const sa=(s.liedanfang||'').toLowerCase().trim();
+          // Match by titel or liedanfang
+          return st===csTitel||st===csAnfang||sa===csAnfang||sa===csTitel
+            ||(csTitel.length>4&&(st.includes(csTitel)||csTitel.includes(st)))
+            ||(csAnfang.length>4&&(sa.includes(csAnfang)||csAnfang.includes(sa)));
         });
         if(!match)continue;
-        // Build update with only improved/missing fields
+        // Build update with improved/missing fields
         const upd={};
-        const fields=['komponist','textdichter','uebersetzer','arrangeur','besetzung','bibelstelle','quelle','rechte','thema','anlass','originaltitel'];
+        const fields=['liedanfang','titel','komponist','textdichter','uebersetzer','arrangeur','besetzung','bibelstelle','quelle','rechte','thema','anlass','originaltitel'];
         fields.forEach(f=>{
+          const dbField=f==='titel'?'title':f;
           const newVal=(cs[f]||'').trim();
-          const oldVal=(match[f]||'').trim();
-          // Update if new value is better: field was empty OR new value is longer/more specific
-          if(newVal&&(!oldVal||newVal.length>oldVal.length))upd[f]=newVal;
+          const oldVal=(match[dbField]||match[f]||'').trim();
+          if(!newVal)return;
+          if(!oldVal){upd[dbField]=newVal;return;}
+          if(f==='komponist'&&match.komponist===match.arrangeur&&newVal!==match.arrangeur){upd[dbField]=newVal;return;}
+          if(newVal.length>oldVal.length+3)upd[dbField]=newVal;
         });
         if(Object.keys(upd).length>0)updates[match.id]=upd;
       }

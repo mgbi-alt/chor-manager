@@ -904,8 +904,8 @@ function filteredSongs(){
   return cachedSongs.filter(s=>{
     if(q&&!['title','liedanfang','refrain','komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(q)))return false;
     if(songFilter.besetzung&&s.besetzung!==songFilter.besetzung)return false;
-    if(songFilter.thema&&s.thema!==songFilter.thema)return false;
-    if(songFilter.anlass&&s.anlass!==songFilter.anlass)return false;
+    if(songFilter.thema&&!(s.thema||'').split(',').map(t=>t.trim()).includes(songFilter.thema))return false;
+    if(songFilter.anlass&&!(s.anlass||'').split(',').map(a=>a.trim()).includes(songFilter.anlass))return false;
     if(songFilter.person){const p=songFilter.person.toLowerCase();if(!['komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(p)))return false;}
     return true;
   }).sort((a,b)=>{
@@ -929,6 +929,7 @@ function updateFilterCount(){
   const countEl=document.getElementById('filter-active-count');
   if(countEl){countEl.textContent=active;countEl.style.display=active?'':'none';}
 }
+function filterSongs(){displaySongs(filteredSongs());updateFilterCount();}
 function clearSongSearch(){
   document.getElementById('song-search').value='';
   songFilter={search:'',besetzung:'',thema:'',anlass:'',person:''};

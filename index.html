@@ -3560,7 +3560,7 @@ async function importDbPdf(evt){
     log('PDF hat '+totalPages+' Seiten.'+(manualQuelle?' | Quelle: '+manualQuelle:'')+(manualLizenz?' | Lizenz: '+manualLizenz:''));
 
     // Step 2: Analyse in chunks of 50 pages with 5-page overlap
-    const CHUNK=20;
+    const CHUNK=15;
     const OVERLAP=2;
     const allSongs=[];
     const numChunks=Math.ceil(totalPages/CHUNK);
@@ -3604,6 +3604,7 @@ async function importDbPdf(evt){
       let raw='';
       try{raw=await callClaude(chunkBase64,prompt);}
       catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
+      if(ci<numChunks-1)await new Promise(r=>setTimeout(r,4000));
       const chunk_songs=parseJsonSongs(raw);
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');
       allSongs.push(...chunk_songs);
@@ -3765,6 +3766,7 @@ async function reanalyzePdf(evt){
       let raw='';
       try{raw=await callClaude(chunkBase64,prompt);}
       catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
+      if(ci<numChunks-1)await new Promise(r=>setTimeout(r,4000));
       const chunkSongs=parseJsonSongs(raw);
       log('  -> '+chunkSongs.length+' Lieder erkannt');
 

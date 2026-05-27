@@ -4198,25 +4198,28 @@ function showMergeGroup(){
     return vals.some(v=>v!==vals[0]&&v!=='');
   });
 
-  // Build diff rows: for each differing field show all values side by side
-  const diffRows=diffFields.map(f=>{
-    const l=fieldLabel[f];
-    const vals=group.map(s=>s[f]||'');
-    const mergedVal=merged[f]||'';
-    return`<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)">
-      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${l}</div>
-      <div style="display:grid;grid-template-columns:repeat(${group.length},1fr);gap:6px;margin-bottom:4px">
-        ${vals.map((v,i)=>`<div style="background:${i===0?'rgba(201,168,76,.08)':'rgba(91,141,238,.06)'};border:0.5px solid ${i===0?'rgba(201,168,76,.2)':'rgba(91,141,238,.15)'};border-radius:6px;padding:5px 8px;font-size:11px;color:${v?'var(--text)':'var(--text3)'}">
-          <div style="font-size:9px;color:${i===0?'var(--accent2)':'#8fb3f5'};margin-bottom:2px">${i===0?'ZIEL':'DUPLIKAT'}</div>
-          ${v?esc(v):'<i>leer</i>'}
-        </div>`).join('')}
-      </div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:2px">→ ERGEBNIS</div>
-      <div style="background:rgba(76,175,130,.08);border:0.5px solid rgba(76,175,130,.2);border-radius:6px;padding:5px 8px;font-size:11px;color:${mergedVal?'var(--text)':'var(--text3)'}">
-        ${mergedVal?esc(mergedVal):'<i>leer</i>'}
-      </div>
-    </div>`;
-  }).join('');
+  // Store merged state in a mutable object so click handlers can update it
+  const mergedState={...merged};
+
+  function buildDiffRows(){
+    return diffFields.map(f=>{
+      const l=fieldLabel[f];
+      const vals=group.map(s=>s[f]||'');
+      return`<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:0.5px solid var(--border)" id="diffrow-${f}">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">${l}</div>
+        <div style="display:grid;grid-template-columns:repeat(${group.length},1fr);gap:5px;margin-bottom:6px">
+          ${vals.map((v,i)=>`<div onclick="mergePickVal('${f}',${JSON.stringify(v)})" style="cursor:pointer;background:${i===0?'rgba(201,168,76,.08)':'rgba(91,141,238,.06)'};border:0.5px solid ${i===0?'rgba(201,168,76,.2)':'rgba(91,141,238,.15)'};border-radius:6px;padding:5px 8px;font-size:11px;color:${v?'var(--text)':'var(--text3)'};transition:border-color .15s,background .15s" title="Klicken um zu übernehmen">
+            <div style="font-size:9px;color:${i===0?'var(--accent2)':'#8fb3f5'};margin-bottom:2px;display:flex;align-items:center;gap:3px">
+              ${i===0?'ZIEL':'DUPLIKAT'} <span style="opacity:.6">↙ übernehmen</span>
+            </div>
+            ${v?esc(v):'<i style="color:var(--text3)">leer</i>'}
+          </div>`).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">→ Ergebnis</div>
+        <input class="fi" id="merge-result-${f}" value="${esc(mergedState[f]||'')}" style="font-size:12px;padding:6px 9px" placeholder="leer lassen um Feld zu leeren" oninput="mergedState['${f}']=this.value">
+      </div>`;
+    }).join('');
+  }
 
   body.innerHTML=`
     <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Duplikat ${mergeIdx+1} von ${mergeGroups.length}</div>
@@ -4237,19 +4240,29 @@ function showMergeGroup(){
     </div>`).join('')}
 
     ${diffFields.length?`
-    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px">Unterschiede (${diffFields.length} Felder)</div>
-    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px">
-      ${diffRows}
-    </div>`:`<div style="font-size:12px;color:var(--text2);margin:10px 0;padding:8px 12px;background:var(--card);border-radius:var(--r)">✓ Keine inhaltlichen Unterschiede in bekannten Feldern.</div>`}
-    <div id="merge-edit-area" style="margin-top:10px"></div>
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px">Unterschiede (${diffFields.length} Felder) — Wert anklicken zum Übernehmen</div>
+    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px" id="diff-rows-container">
+      ${buildDiffRows()}
+    </div>`:`<div style="font-size:12px;color:var(--text2);margin:10px 0;padding:8px 12px;background:var(--card);border-radius:var(--r)">✓ Keine inhaltlichen Unterschiede.</div>`}
   `;
+
+  // Expose mergePickVal globally so inline onclick works
+  window.mergePickVal=(f,val)=>{
+    mergedState[f]=val;
+    const inp=document.getElementById('merge-result-'+f);
+    if(inp){inp.value=val;inp.style.borderColor='var(--success)';setTimeout(()=>inp.style.borderColor='',800);}
+  };
 
   footer.innerHTML='';
   const skipBtn=document.createElement('button');skipBtn.className='btn btn-g';skipBtn.style.flex='1';skipBtn.textContent='Überspringen';
   skipBtn.onclick=()=>{mergeIdx++;showMergeGroup();};
 
   const mergeBtn=document.createElement('button');mergeBtn.className='btn btn-p';mergeBtn.style.flex='2';mergeBtn.textContent=`✓ Zusammenführen (${group.length} → 1)`;
-  mergeBtn.onclick=()=>executeMerge(group,merged);
+  mergeBtn.onclick=()=>{
+    // Read current input values into mergedState before saving
+    diffFields.forEach(f=>{const el=document.getElementById('merge-result-'+f);if(el)mergedState[f]=el.value.trim();});
+    executeMerge(group,mergedState);
+  };
 
   footer.appendChild(skipBtn);footer.appendChild(mergeBtn);
 }

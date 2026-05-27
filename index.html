@@ -903,10 +903,12 @@ function updateSourceBtn(){
   btn.style.color=showAllSources?'var(--accent2)':'var(--text2)';
 }
 function toggleSongSource(){showAllSources=!showAllSources;updateSourceBtn();displaySongs(filteredSongs());updateFilterCount();}
+function normalizeLabel(v){return v.trim().replace(/^(.)(.*)$/,(m,a,b)=>a.toUpperCase()+b.toLowerCase());}
+function dedupeLabels(raw){const seen=new Map();raw.filter(Boolean).forEach(v=>{const n=normalizeLabel(v);const k=n.toLowerCase();if(!seen.has(k))seen.set(k,n);});return [...seen.values()].sort((a,b)=>a.localeCompare(b,'de'));}
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
-  const the=[...new Set(cachedSongs.flatMap(s=>(s.thema||'').split(',').map(t=>t.trim())).filter(Boolean))].sort();
-  const anl=[...new Set(cachedSongs.flatMap(s=>(s.anlass||'').split(',').map(a=>a.trim())).filter(Boolean))].sort();
+  const the=dedupeLabels(cachedSongs.flatMap(s=>(s.thema||'').split(',').map(t=>t.trim())));
+  const anl=dedupeLabels(cachedSongs.flatMap(s=>(s.anlass||'').split(',').map(a=>a.trim())));
   // Persons: all composer/arranger/etc names
   const persons=[...new Set(cachedSongs.flatMap(s=>[s.komponist,s.textdichter,s.arrangeur,s.uebersetzer].filter(Boolean)))];
   const el=document.getElementById('song-filters');el.innerHTML='';
@@ -920,8 +922,8 @@ function filteredSongs(){
     if(!showAllSources&&!s.in_repertoire)return false;
     if(q&&!['title','liedanfang','refrain','komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(q)))return false;
     if(songFilter.besetzung&&s.besetzung!==songFilter.besetzung)return false;
-    if(songFilter.thema&&!(s.thema||'').split(',').map(t=>t.trim()).includes(songFilter.thema))return false;
-    if(songFilter.anlass&&!(s.anlass||'').split(',').map(a=>a.trim()).includes(songFilter.anlass))return false;
+    if(songFilter.thema&&!(s.thema||'').split(',').map(t=>normalizeLabel(t)).includes(songFilter.thema))return false;
+    if(songFilter.anlass&&!(s.anlass||'').split(',').map(a=>normalizeLabel(a)).includes(songFilter.anlass))return false;
     if(songFilter.person){const p=songFilter.person.toLowerCase();if(!['komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(p)))return false;}
     return true;
   }).sort((a,b)=>{
@@ -3902,6 +3904,11 @@ async function renderSettings(tab='members'){
         <button class="btn btn-g" style="width:100%" onclick="document.getElementById('db-pdf-reanalyze').click()">🔄 Bestehende Daten nachkorrigieren</button>
         <div id="db-pdf-status" style="margin-top:10px;max-height:300px;overflow-y:auto"></div>
       </div>
+      <div class="st" style="margin-top:16px">Datenbank-Pflege</div>
+      <div class="card" style="cursor:default">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Themen & Anlässe vereinheitlichen: Zusammenführt doppelte Labels, normalisiert Schreibweisen und überführt alle Anlass-Werte in das Thema-Feld.</div>
+        <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
+      </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
         <div class="fr2">
@@ -4041,6 +4048,58 @@ async function saveProfile(){
 // ========== MODAL CLOSE ==========
 document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+// ========== DB CLEANUP ==========
+async function runDbCleanup(){
+  // Merge map: old value (lowercase) -> canonical value
+  const THEMA_MERGE={
+    'dank':'Dankbarkeit',
+    'jesu auferstehung':'Auferstehung',
+    'fürbitte':'Gebet',
+    'gemeinschaftlicher lobpreis':'Lobpreis',
+    'wiederkunft':'Wiederkunft Christi',
+    'gottes herrschaft':'Gottes Herrschaft',
+    'königsherrschaft gottes':'Gottes Herrschaft',
+    'jesus':'Jesus Christus',
+    'wort gottes':'Gottes Wort',
+  };
+  // Anlass values to move into thema (canonical forms)
+  const ANLASS_TO_THEMA=['Abendmahl','Advent','Erntedank','Gottesdienst','Ostern','Passion','Taufe','Weihnachten','Himmelfahrt','Hochzeit','Karfreitag','Neujahr','Pfingsten','Evangelisation','Jahreswechsel'];
+
+  const{data:songs,error}=await SB.from('songs').select('id,thema,anlass');
+  if(error){alert('Fehler beim Laden: '+error.message);return;}
+
+  let updated=0;
+  for(const s of songs){
+    // Collect all thema tags
+    let themen=(s.thema||'').split(',').map(t=>t.trim()).filter(Boolean);
+    // Collect anlass tags and merge into thema
+    const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
+    for(const a of anlaesse){
+      const canon=ANLASS_TO_THEMA.find(x=>x.toLowerCase()===a.toLowerCase());
+      if(canon&&!themen.some(t=>t.toLowerCase()===canon.toLowerCase()))themen.push(canon);
+    }
+    // Apply merge map to all thema tags
+    themen=themen.map(t=>{
+      const merged=THEMA_MERGE[t.toLowerCase()];
+      return merged||t;
+    });
+    // Deduplicate (case-insensitive)
+    const seen=new Map();
+    themen.forEach(t=>{const k=t.toLowerCase();if(!seen.has(k))seen.set(k,t);});
+    themen=[...seen.values()];
+
+    const newThema=themen.join(', ');
+    const oldThema=s.thema||'';
+    const oldAnlass=s.anlass||'';
+    if(newThema!==oldThema||oldAnlass!==''){
+      await SB.from('songs').update({thema:newThema,anlass:''}).eq('id',s.id);
+      updated++;
+    }
+  }
+  alert(`Bereinigung abgeschlossen. ${updated} Songs aktualisiert.`);
+  await loadSongs();
+}
 
 // ========== INIT ==========
 (async function init(){

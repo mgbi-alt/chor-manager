@@ -3503,7 +3503,7 @@ async function callClaude(base64,prompt){
   const resp=await fetch(SB_URL+'/functions/v1/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:[
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,messages:[{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
       {type:'text',text:prompt}
     ]}]})
@@ -3604,10 +3604,13 @@ async function importDbPdf(evt){
       let raw='';
       try{raw=await callClaude(chunkBase64,prompt);}
       catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
-      if(ci<numChunks-1)await new Promise(r=>setTimeout(r,4000));
       const chunk_songs=parseJsonSongs(raw);
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');
       allSongs.push(...chunk_songs);
+      if(ci<numChunks-1){
+        log('Warte 15s (Rate-Limit)...');
+        await new Promise(r=>setTimeout(r,15000));
+      }
     }
 
     log('Gesamt: '+allSongs.length+' Lieder erkannt');
@@ -3766,9 +3769,12 @@ async function reanalyzePdf(evt){
       let raw='';
       try{raw=await callClaude(chunkBase64,prompt);}
       catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
-      if(ci<numChunks-1)await new Promise(r=>setTimeout(r,4000));
       const chunkSongs=parseJsonSongs(raw);
       log('  -> '+chunkSongs.length+' Lieder erkannt');
+      if(ci<numChunks-1){
+        log('Warte 15s (Rate-Limit)...');
+        await new Promise(r=>setTimeout(r,15000));
+      }
 
       // Match each found song to existing DB songs
       for(const cs of chunkSongs){

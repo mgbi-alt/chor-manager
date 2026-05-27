@@ -903,7 +903,13 @@ function updateSourceBtn(){
   btn.style.color=showAllSources?'var(--accent2)':'var(--text2)';
 }
 function toggleSongSource(){showAllSources=!showAllSources;updateSourceBtn();displaySongs(filteredSongs());updateFilterCount();}
-function normalizeLabel(v){return v.trim().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');}
+function normalizeLabel(v){
+  const small=new Set(['um','zu','in','an','von','der','die','das','und','oder','für','mit','am','im','auf','bei','&','a','the','of','and','or']);
+  return v.trim().split(' ').map((w,i)=>{
+    if(i>0&&small.has(w.toLowerCase()))return w.toLowerCase();
+    return w.charAt(0).toUpperCase()+w.slice(1);
+  }).join(' ');
+}
 function dedupeLabels(raw){const seen=new Map();raw.filter(Boolean).forEach(v=>{const n=normalizeLabel(v);const k=n.toLowerCase();if(!seen.has(k))seen.set(k,n);});return [...seen.values()].sort((a,b)=>a.localeCompare(b,'de'));}
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
@@ -969,7 +975,8 @@ function displaySongs(songs){
   if(countEl)countEl.textContent=songs.length+' / '+repCount+(showAllSources?' (inkl. Datenbank)':'');
   if(!songs.length){el.innerHTML='<div class="empty"><p>Keine Lieder gefunden</p></div>';return;}
   el.innerHTML=songs.map(s=>{
-    const haupttext=s.liedanfang?`${esc(s.liedanfang)}${s.title&&s.title!==s.liedanfang?` <span style="color:var(--text3)">|</span> ${esc(s.title)}`:''}`:esc(s.title);
+    const fixTitle=t=>{if(!t)return t;const u=t.replace(/[ÄÖÜäöüA-Z]/g,'');return(t===t.toUpperCase()||t.replace(/\s/g,'')===t.replace(/\s/g,'').toUpperCase())?t.charAt(0).toUpperCase()+t.slice(1).toLowerCase():t;};
+    const haupttext=s.liedanfang?`${esc(s.liedanfang)}${s.title&&s.title!==s.liedanfang?` <span style="color:var(--text3)">|</span> ${esc(fixTitle(s.title))}`:''}`:esc(fixTitle(s.title));
     const themen=(s.thema||'').split(',').map(t=>t.trim()).filter(Boolean);
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
@@ -4084,12 +4091,14 @@ async function runDbCleanup(){
       const merged=THEMA_MERGE[t.toLowerCase()];
       return merged||t;
     });
+    // Apply Title Case normalization
+    themen=themen.map(t=>normalizeLabel(t));
     // Deduplicate (case-insensitive)
     const seen=new Map();
     themen.forEach(t=>{const k=t.toLowerCase();if(!seen.has(k))seen.set(k,t);});
     themen=[...seen.values()];
 
-    const newThema=themen.join(', ');
+    const newThema=themen.sort((a,b)=>a.localeCompare(b,'de')).join(', ');
     const oldThema=s.thema||'';
     const oldAnlass=s.anlass||'';
     if(newThema!==oldThema||oldAnlass!==''){

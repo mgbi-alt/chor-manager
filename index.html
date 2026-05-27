@@ -3555,7 +3555,9 @@ async function importDbPdf(evt){
     // Step 1: Get total page count
     const srcPdf=await PDFLib.PDFDocument.load(buf);
     const totalPages=srcPdf.getPageCount();
-    log('PDF hat '+totalPages+' Seiten.');
+    const manualQuelle=(document.getElementById('db-manual-quelle')?.value||'').trim();
+    const manualLizenz=(document.getElementById('db-manual-lizenz')?.value||'').trim();
+    log('PDF hat '+totalPages+' Seiten.'+(manualQuelle?' | Quelle: '+manualQuelle:'')+(manualLizenz?' | Lizenz: '+manualLizenz:''));
 
     // Step 2: Analyse in chunks of 50 pages with 5-page overlap
     const CHUNK=20;
@@ -3714,9 +3716,7 @@ async function reanalyzePdf(evt){
     const buf=await file.arrayBuffer();
     const srcPdf=await PDFLib.PDFDocument.load(buf);
     const totalPages=srcPdf.getPageCount();
-    const manualQuelle=(document.getElementById('db-manual-quelle')?.value||'').trim();
-    const manualLizenz=(document.getElementById('db-manual-lizenz')?.value||'').trim();
-    log('PDF: '+totalPages+' Seiten'+(manualQuelle?' | Quelle: '+manualQuelle:'')+(manualLizenz?' | Lizenz: '+manualLizenz:''));
+    log('PDF: '+totalPages+' Seiten');
 
     // Load all DB songs that have page info stored in song_files or need correction
     const{data:dbSongs}=await SB.from('songs').select('id,liedanfang,titel:title,komponist,textdichter,uebersetzer,arrangeur,besetzung,bibelstelle,quelle,thema,anlass,rechte').eq('in_repertoire',false).order('created_at');

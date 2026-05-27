@@ -1034,7 +1034,7 @@ async function openSongDetail(id){
   if(isAdmin){
     const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='1';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-song-detail');openSongForm(id);};
     const db=document.createElement('button');db.className='btn btn-d';db.style.flex='1';db.textContent='Löschen';db.onclick=()=>{if(confirm('Löschen?'))delSong(id);};
-    footer.appendChild(eb);footer.appendChild(db);
+    footer.insertBefore(eb,footer.firstChild);footer.appendChild(db);
   }
   openModal('m-song-detail');
 }
@@ -1117,7 +1117,7 @@ function openSongForm(id=null,prefill={}){
 }
 function buildSongFormHTML(s,id=null){
   return`<div class="fs"><div class="fst">Allgemein</div>
-    <div class="fg"><label class="fl">Titel (optional)</label><input class="fi" id="sf-title" value="${esc(s.title||'')}"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Titel (optional)</label><input class="fi" id="sf-title" value="${esc(s.title||'')}"></div><div class="fg"><label class="fl">Originaltitel</label><input class="fi" id="sf-orig" value="${esc(s.originaltitel||'')}"></div></div>
     <div class="fr2"><div class="fg"><label class="fl">Liedanfang</label><input class="fi" id="sf-anf" value="${esc(s.liedanfang||'')}"></div><div class="fg"><label class="fl">Refrainanfang</label><input class="fi" id="sf-ref" value="${esc(s.refrain||'')}"></div></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Besetzung</label><select class="fi" id="sf-bes">${['','SATB','TTBB','SSAA','SSA','SAB','SSATBB','Gemischter Chor','Männerchor','Frauenchor'].map(b=>`<option value="${b}" ${(s.besetzung||'')==b?'selected':''}>${b||'– wählen –'}</option>`).join('')}</select></div>
@@ -1137,8 +1137,7 @@ function buildSongFormHTML(s,id=null){
   </div>
   <div class="fs"><div class="fst">Rechtliches</div>
     <div class="fr2"><div class="fg"><label class="fl">Rechte</label><input class="fi" id="sf-recht" value="${esc(s.rechte||'')}"></div><div class="fg"><label class="fl">Lizenz</label><input class="fi" id="sf-liz" value="${esc(s.lizenz||'')}"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Originaltitel</label><input class="fi" id="sf-orig" value="${esc(s.originaltitel||'')}"></div><div class="fg"><label class="fl">Quelle</label><input class="fi" id="sf-quelle" value="${esc(s.quelle||'')}"></div></div>
-    <div class="fr2"><div class="fg"><label class="fl">Quellen-Nr.</label><input class="fi" id="sf-quelle-nr" value="${esc(s.quelle_nr||'')}" placeholder="z.B. 42"></div><div class="fg"><label class="fl">Lizenz</label><input class="fi" id="sf-liz" value="${esc(s.lizenz||'')}"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Quelle</label><input class="fi" id="sf-quelle" value="${esc(s.quelle||'')}"></div><div class="fg"><label class="fl">Quellen-Nr.</label><input class="fi" id="sf-quelle-nr" value="${esc(s.quelle_nr||'')}" placeholder="z.B. 42"></div></div>
   </div>
   <div class="fs"><div class="fst">Links & Notizen</div>
     <div class="fg"><label class="fl">YouTube / Spotify</label><input class="fi" id="sf-link" value="${esc((s.links||[])[0]||'')}" placeholder="https://…"></div>

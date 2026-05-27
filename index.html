@@ -903,7 +903,7 @@ function updateSourceBtn(){
   btn.style.color=showAllSources?'var(--accent2)':'var(--text2)';
 }
 function toggleSongSource(){showAllSources=!showAllSources;updateSourceBtn();displaySongs(filteredSongs());updateFilterCount();}
-function normalizeLabel(v){return v.trim().replace(/^(.)(.*)$/,(m,a,b)=>a.toUpperCase()+b.toLowerCase());}
+function normalizeLabel(v){return v.trim().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');}
 function dedupeLabels(raw){const seen=new Map();raw.filter(Boolean).forEach(v=>{const n=normalizeLabel(v);const k=n.toLowerCase();if(!seen.has(k))seen.set(k,n);});return [...seen.values()].sort((a,b)=>a.localeCompare(b,'de'));}
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];

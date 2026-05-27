@@ -3503,7 +3503,7 @@ async function callClaude(base64,prompt){
   const resp=await fetch(SB_URL+'/functions/v1/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
-    body:JSON.stringify({model:'claude-opus-4-5',max_tokens:8000,messages:[{role:'user',content:[
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
       {type:'text',text:prompt}
     ]}]})

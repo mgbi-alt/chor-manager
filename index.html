@@ -910,7 +910,8 @@ function buildFilters(){
   // Persons: all composer/arranger/etc names
   const persons=[...new Set(cachedSongs.flatMap(s=>[s.komponist,s.textdichter,s.arrangeur,s.uebersetzer].filter(Boolean)))];
   const el=document.getElementById('song-filters');el.innerHTML='';
-  const addGroup=(items,key)=>items.forEach(v=>{const c=document.createElement('div');c.className='fchip'+(songFilter[key]===v?' active':'');c.textContent=v;c.onclick=()=>{songFilter[key]=songFilter[key]===v?'':v;buildFilters();displaySongs(filteredSongs());updateFilterCount();};el.appendChild(c);});
+  const shownLabels=new Set();
+  const addGroup=(items,key)=>items.forEach(v=>{const vl=v.toLowerCase();if(key!=='besetzung'&&shownLabels.has(vl))return;shownLabels.add(vl);const c=document.createElement('div');c.className='fchip'+(songFilter[key]===v?' active':'');c.textContent=v;c.onclick=()=>{songFilter[key]=songFilter[key]===v?'':v;buildFilters();displaySongs(filteredSongs());updateFilterCount();};el.appendChild(c);});
   addGroup(bes,'besetzung');addGroup(the,'thema');addGroup(anl,'anlass');
 }
 function filteredSongs(){

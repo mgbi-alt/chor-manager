@@ -4122,6 +4122,17 @@ async function runDbCleanup(){
 
 
 // ========== MERGE DUPLICATES ==========
+function mergePickVal(f,val){
+  window._mergedState[f]=val;
+  const inp=document.getElementById('merge-result-'+f);
+  if(inp){
+    inp.value=val;
+    inp.style.borderColor='var(--success)';
+    inp.style.background='rgba(76,175,130,.08)';
+    setTimeout(()=>{inp.style.borderColor='';inp.style.background='';},900);
+  }
+}
+
 function levenshtein(a,b){
   const m=a.length,n=b.length;
   const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));
@@ -4198,8 +4209,8 @@ function showMergeGroup(){
     return vals.some(v=>v!==vals[0]&&v!=='');
   });
 
-  // Store merged state in a mutable object so click handlers can update it
-  const mergedState={...merged};
+  // Store merged state globally so inline onclick handlers can access it
+  window._mergedState={...merged};
 
   function buildDiffRows(){
     return diffFields.map(f=>{
@@ -4216,7 +4227,7 @@ function showMergeGroup(){
           </div>`).join('')}
         </div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:3px">→ Ergebnis</div>
-        <input class="fi" id="merge-result-${f}" value="${esc(mergedState[f]||'')}" style="font-size:12px;padding:6px 9px" placeholder="leer lassen um Feld zu leeren" oninput="mergedState['${f}']=this.value">
+        <input class="fi" id="merge-result-${f}" value="${esc(window._mergedState[f]||'')}" style="font-size:12px;padding:6px 9px" placeholder="leer lassen um Feld zu leeren" oninput="window._mergedState['${f}']=this.value">
       </div>`;
     }).join('');
   }
@@ -4246,12 +4257,7 @@ function showMergeGroup(){
     </div>`:`<div style="font-size:12px;color:var(--text2);margin:10px 0;padding:8px 12px;background:var(--card);border-radius:var(--r)">✓ Keine inhaltlichen Unterschiede.</div>`}
   `;
 
-  // Expose mergePickVal globally so inline onclick works
-  window.mergePickVal=(f,val)=>{
-    mergedState[f]=val;
-    const inp=document.getElementById('merge-result-'+f);
-    if(inp){inp.value=val;inp.style.borderColor='var(--success)';setTimeout(()=>inp.style.borderColor='',800);}
-  };
+
 
   footer.innerHTML='';
   const skipBtn=document.createElement('button');skipBtn.className='btn btn-g';skipBtn.style.flex='1';skipBtn.textContent='Überspringen';
@@ -4260,8 +4266,8 @@ function showMergeGroup(){
   const mergeBtn=document.createElement('button');mergeBtn.className='btn btn-p';mergeBtn.style.flex='2';mergeBtn.textContent=`✓ Zusammenführen (${group.length} → 1)`;
   mergeBtn.onclick=()=>{
     // Read current input values into mergedState before saving
-    diffFields.forEach(f=>{const el=document.getElementById('merge-result-'+f);if(el)mergedState[f]=el.value.trim();});
-    executeMerge(group,mergedState);
+    diffFields.forEach(f=>{const el=document.getElementById('merge-result-'+f);if(el)window._mergedState[f]=el.value.trim();});
+    executeMerge(group,window._mergedState);
   };
 
   footer.appendChild(skipBtn);footer.appendChild(mergeBtn);

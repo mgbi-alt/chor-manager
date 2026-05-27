@@ -905,8 +905,8 @@ function updateSourceBtn(){
 function toggleSongSource(){showAllSources=!showAllSources;updateSourceBtn();displaySongs(filteredSongs());updateFilterCount();}
 function buildFilters(){
   const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
-  const the=[...new Set(cachedSongs.map(s=>s.thema).filter(Boolean))];
-  const anl=[...new Set(cachedSongs.map(s=>s.anlass).filter(Boolean))];
+  const the=[...new Set(cachedSongs.flatMap(s=>(s.thema||'').split(',').map(t=>t.trim())).filter(Boolean))].sort();
+  const anl=[...new Set(cachedSongs.flatMap(s=>(s.anlass||'').split(',').map(a=>a.trim())).filter(Boolean))].sort();
   // Persons: all composer/arranger/etc names
   const persons=[...new Set(cachedSongs.flatMap(s=>[s.komponist,s.textdichter,s.arrangeur,s.uebersetzer].filter(Boolean)))];
   const el=document.getElementById('song-filters');el.innerHTML='';

@@ -3499,18 +3499,39 @@ async function loadPdfLib(){
   });
 }
 
-async function callClaude(base64,prompt){
-  const resp=await fetch(SB_URL+'/functions/v1/claude-proxy',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,messages:[{role:'user',content:[
-      {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-      {type:'text',text:prompt}
-    ]}]})
-  });
-  if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
-  const data=await resp.json();
-  return(data.content||[]).map(c=>c.text||'').join('');
+async function callClaude(base64,prompt,retries=3){
+  for(let attempt=0;attempt<retries;attempt++){
+    try{
+      const resp=await fetch(SB_URL+'/functions/v1/claude-proxy',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
+        body:JSON.stringify({model:'claude-opus-4-5',max_tokens:2000,messages:[{role:'user',content:[
+          {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+          {type:'text',text:prompt}
+        ]}]})
+      });
+      if(!resp.ok){
+        const e=await resp.json().catch(()=>({}));
+        const msg=e.error?.message||'HTTP '+resp.status;
+        // Rate limit: wait and retry
+        if(msg.includes('rate limit')||msg.includes('529')||resp.status===429){
+          const waitSec=65*(attempt+1);
+          const el=document.getElementById('db-pdf-status');
+          if(el){const d=document.createElement('div');d.style.cssText='font-size:12px;color:var(--warn)';el.appendChild(d);
+            for(let s=waitSec;s>0;s--){d.textContent='Rate-Limit – warte '+s+'s (Versuch '+(attempt+2)+'/'+retries+')...';await new Promise(r=>setTimeout(r,1000));}
+          } else await new Promise(r=>setTimeout(r,waitSec*1000));
+          continue;
+        }
+        throw new Error(msg);
+      }
+      const data=await resp.json();
+      return(data.content||[]).map(c=>c.text||'').join('');
+    }catch(e){
+      if(attempt===retries-1)throw e;
+      await new Promise(r=>setTimeout(r,5000));
+    }
+  }
+  throw new Error('Max retries reached');
 }
 
 function parseJsonSongs(raw){
@@ -3560,8 +3581,8 @@ async function importDbPdf(evt){
     log('PDF hat '+totalPages+' Seiten.'+(manualQuelle?' | Quelle: '+manualQuelle:'')+(manualLizenz?' | Lizenz: '+manualLizenz:''));
 
     // Step 2: Analyse in chunks of 50 pages with 5-page overlap
-    const CHUNK=15;
-    const OVERLAP=2;
+    const CHUNK=10;
+    const OVERLAP=1;
     const allSongs=[];
     const numChunks=Math.ceil(totalPages/CHUNK);
 
@@ -3581,6 +3602,8 @@ async function importDbPdf(evt){
 
 
       const prompt='Diese PDF enthaelt Seiten '+pageFrom+'-'+pageTo+' aus einem Chorliederbuch (Gesamtseiten: '+totalPages+').'
+        +' Extrahiere ALLE Lieder die auf diesen Seiten beginnen - auch wenn die Liednummer nicht mit der Seitennummer uebereinstimmt.'
+        +' Die Lieder haben oben eine grosse Nummer und einen Titel. Jedes Lied beginnt auf einer neuen Seite.'
         +(ci>0?' Die ersten '+OVERLAP+' Seiten ueberlappen mit dem vorherigen Abschnitt - nur Lieder aufnehmen die auf Seite '+pageFrom+' oder spaeter BEGINNEN.':'')
         +'\nExtrahiere alle vollstaendigen Lieder. Ueberspringe: Titelblatt, Inhaltsverzeichnis, Abschnittsseiten, Trennseiten, leere Seiten.'
         +(isLast?'':'\nLieder die am Ende dieses Abschnitts noch nicht abgeschlossen sind NICHT aufnehmen.')
@@ -3608,8 +3631,14 @@ async function importDbPdf(evt){
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');
       allSongs.push(...chunk_songs);
       if(ci<numChunks-1){
-        log('Warte 15s (Rate-Limit)...');
-        await new Promise(r=>setTimeout(r,15000));
+        const wait=65;
+        const d=document.createElement('div');
+        d.style.cssText='font-size:12px;padding:3px 0;color:var(--text2)';
+        status.appendChild(d);
+        for(let s=wait;s>0;s--){
+          d.textContent='Warte '+s+'s (Rate-Limit)...';
+          await new Promise(r=>setTimeout(r,1000));
+        }
       }
     }
 
@@ -3772,8 +3801,14 @@ async function reanalyzePdf(evt){
       const chunkSongs=parseJsonSongs(raw);
       log('  -> '+chunkSongs.length+' Lieder erkannt');
       if(ci<numChunks-1){
-        log('Warte 15s (Rate-Limit)...');
-        await new Promise(r=>setTimeout(r,15000));
+        const wait2=65;
+        const d2=document.createElement('div');
+        d2.style.cssText='font-size:12px;padding:3px 0;color:var(--text2)';
+        status.appendChild(d2);
+        for(let s=wait2;s>0;s--){
+          d2.textContent='Warte '+s+'s (Rate-Limit)...';
+          await new Promise(r=>setTimeout(r,1000));
+        }
       }
 
       // Match each found song to existing DB songs

@@ -447,6 +447,14 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="mf" id="cf-footer"></div>
 </div></div>
 
+<!-- Merge Duplicates -->
+<div class="mo" id="m-merge"><div class="md" style="max-height:96vh">
+  <div class="mhandle"></div>
+  <div class="mh"><h3>🔍 Duplikate zusammenführen</h3><button class="mclose" onclick="closeModal('m-merge')">×</button></div>
+  <div class="mb" id="merge-body" style="padding:14px"></div>
+  <div class="mf" id="merge-footer"></div>
+</div></div>
+
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
@@ -3916,6 +3924,7 @@ async function renderSettings(tab='members'){
       <div class="card" style="cursor:default">
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Themen & Anlässe vereinheitlichen: Zusammenführt doppelte Labels, normalisiert Schreibweisen und überführt alle Anlass-Werte in das Thema-Feld.</div>
         <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
@@ -4109,6 +4118,143 @@ async function runDbCleanup(){
   }
   alert(`Bereinigung abgeschlossen. ${updated} Songs aktualisiert.`);
   await loadSongs();
+}
+
+
+// ========== MERGE DUPLICATES ==========
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function strSim(a,b){
+  if(!a||!b)return 0;
+  const al=a.toLowerCase().trim(),bl=b.toLowerCase().trim();
+  if(al===bl)return 1;
+  const maxLen=Math.max(al.length,bl.length);
+  return maxLen===0?1:1-levenshtein(al,bl)/maxLen;
+}
+
+let mergeGroups=[];
+let mergeIdx=0;
+
+async function openMergeTool(){
+  document.getElementById('merge-body').innerHTML='<p style="color:var(--text2);font-size:13px">Suche Duplikate…</p>';
+  document.getElementById('merge-footer').innerHTML='';
+  openModal('m-merge');
+  // Load all songs (incl. DB)
+  const{data:allSongs}=await SB.from('songs').select('id,liedanfang,title,komponist,textdichter,arrangeur,uebersetzer,besetzung,thema,rechte,lizenz,originaltitel,quelle,quelle_nr,bibelstelle,notizen,in_repertoire,schrank,created_at');
+  if(!allSongs||!allSongs.length){document.getElementById('merge-body').innerHTML='<p style="color:var(--text2)">Keine Songs gefunden.</p>';return;}
+
+  // Find duplicate groups by liedanfang similarity >= 0.85
+  const used=new Set();
+  mergeGroups=[];
+  for(let i=0;i<allSongs.length;i++){
+    if(used.has(allSongs[i].id))continue;
+    const group=[allSongs[i]];
+    const key=allSongs[i].liedanfang||allSongs[i].title||'';
+    for(let j=i+1;j<allSongs.length;j++){
+      if(used.has(allSongs[j].id))continue;
+      const key2=allSongs[j].liedanfang||allSongs[j].title||'';
+      if(strSim(key,key2)>=0.85){group.push(allSongs[j]);used.add(allSongs[j].id);}
+    }
+    if(group.length>1){used.add(allSongs[i].id);mergeGroups.push(group);}
+  }
+
+  if(!mergeGroups.length){
+    document.getElementById('merge-body').innerHTML='<p style="color:var(--success);font-size:13px">✓ Keine Duplikate gefunden!</p>';
+    return;
+  }
+  mergeIdx=0;
+  showMergeGroup();
+}
+
+function showMergeGroup(){
+  const body=document.getElementById('merge-body');
+  const footer=document.getElementById('merge-footer');
+  if(mergeIdx>=mergeGroups.length){
+    body.innerHTML='<p style="color:var(--success);font-size:14px">✓ Alle Duplikate bearbeitet!</p>';
+    footer.innerHTML=`<button class="btn btn-g" style="flex:1" onclick="closeModal('m-merge');loadSongs()">Schließen</button>`;
+    return;
+  }
+  const group=mergeGroups[mergeIdx];
+  const primary=group[0]; // always merge INTO first
+  const dupes=group.slice(1);
+
+  // Build merged preview: primary fields + fill from dupes where empty
+  const merged={...primary};
+  const fields=['komponist','textdichter','arrangeur','uebersetzer','besetzung','thema','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','notizen','schrank'];
+  for(const f of fields){if(!merged[f])for(const d of dupes){if(d[f]){merged[f]=d[f];break;}}}
+  if(!merged.in_repertoire&&dupes.some(d=>d.in_repertoire))merged.in_repertoire=true;
+
+  const fieldLabel={'liedanfang':'Liedanfang','title':'Titel','komponist':'Komponist','textdichter':'Textdichter','arrangeur':'Arrangeur','thema':'Thema','besetzung':'Besetzung','rechte':'Rechte/Lizenz','quelle':'Quelle','in_repertoire':'Im Repertoire'};
+
+  body.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Duplikat ${mergeIdx+1} von ${mergeGroups.length}</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+      <div style="height:3px;background:var(--accent);border-radius:2px;flex:${mergeIdx};transition:flex .3s"></div>
+      <div style="height:3px;background:var(--border);border-radius:2px;flex:${mergeGroups.length-mergeIdx}"></div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Zusammenzuführende Einträge</div>
+    ${group.map((s,i)=>`<div style="background:${i===0?'rgba(201,168,76,.08)':'rgba(91,141,238,.06)'};border:0.5px solid ${i===0?'rgba(201,168,76,.25)':'rgba(91,141,238,.2)'};border-radius:var(--r);padding:9px 11px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        ${i===0?'<span style="font-size:9px;background:var(--accent);color:var(--bg);border-radius:8px;padding:1px 6px;font-weight:600">ZIEL</span>':'<span style="font-size:9px;background:rgba(91,141,238,.3);color:#8fb3f5;border-radius:8px;padding:1px 6px">DUPLIKAT</span>'}
+        ${s.in_repertoire?'<span class="badge green" style="font-size:9px">Repertoire</span>':'<span class="badge gray" style="font-size:9px">Datenbank</span>'}
+      </div>
+      <div style="font-size:13px;font-weight:500">${esc(s.liedanfang||s.title||'–')}</div>
+      ${s.title&&s.title!==s.liedanfang?`<div style="font-size:11px;color:var(--text3)">${esc(s.title)}</div>`:''}
+      <div style="font-size:11px;color:var(--text2);margin-top:3px">${[s.komponist,s.arrangeur].filter(Boolean).join(' · ')||'–'}</div>
+    </div>`).join('')}
+
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">Ergebnis nach Merge</div>
+    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px">
+      ${Object.entries(fieldLabel).filter(([f])=>merged[f]).map(([f,l])=>`<div style="display:flex;gap:8px;margin-bottom:5px"><span style="font-size:10px;color:var(--text3);min-width:90px;text-transform:uppercase">${l}</span><span style="font-size:12px">${f==='in_repertoire'?(merged[f]?'Ja':'Nein'):esc(String(merged[f]||''))}</span></div>`).join('')}
+    </div>
+    <div id="merge-edit-area" style="margin-top:10px"></div>
+  `;
+
+  footer.innerHTML='';
+  const skipBtn=document.createElement('button');skipBtn.className='btn btn-g';skipBtn.style.flex='1';skipBtn.textContent='Überspringen';
+  skipBtn.onclick=()=>{mergeIdx++;showMergeGroup();};
+
+  const mergeBtn=document.createElement('button');mergeBtn.className='btn btn-p';mergeBtn.style.flex='2';mergeBtn.textContent=`✓ Zusammenführen (${group.length} → 1)`;
+  mergeBtn.onclick=()=>executeMerge(group,merged);
+
+  footer.appendChild(skipBtn);footer.appendChild(mergeBtn);
+}
+
+async function executeMerge(group,merged){
+  const primary=group[0];
+  const dupeIds=group.slice(1).map(s=>s.id);
+  const mergeBtn=document.getElementById('merge-footer').querySelector('.btn-p');
+  if(mergeBtn){mergeBtn.disabled=true;mergeBtn.textContent='Führe zusammen…';}
+
+  // 1. Update primary with merged data
+  const updateFields={};
+  const fields=['komponist','textdichter','arrangeur','uebersetzer','besetzung','thema','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','notizen','schrank','in_repertoire'];
+  for(const f of fields)updateFields[f]=merged[f]??primary[f]??null;
+  await SB.from('songs').update(updateFields).eq('id',primary.id);
+
+  // 2. Re-link all event_songs entries from dupes to primary
+  for(const did of dupeIds){
+    await SB.from('event_songs').update({song_id:primary.id}).eq('song_id',did);
+  }
+
+  // 3. Re-link song_files from dupes to primary
+  for(const did of dupeIds){
+    await SB.from('song_files').update({song_id:primary.id}).eq('song_id',did);
+  }
+
+  // 4. Delete dupes
+  for(const did of dupeIds){
+    await SB.from('songs').delete().eq('id',did);
+  }
+
+  T(`✓ ${group.length} Einträge zusammengeführt`,'ok');
+  mergeIdx++;
+  showMergeGroup();
 }
 
 // ========== INIT ==========

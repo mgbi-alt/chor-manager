@@ -1032,10 +1032,12 @@ async function openSongDetail(id){
     footer.appendChild(rb);
   }
   if(isAdmin){
-    const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='1';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-song-detail');openSongForm(id);};
-    const db=document.createElement('button');db.className='btn btn-d';db.style.flex='1';db.textContent='Löschen';db.onclick=()=>{if(confirm('Löschen?'))delSong(id);};
+    const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='2';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-song-detail');openSongForm(id);};
+    const db=document.createElement('button');db.className='btn btn-d btn-sm';db.style.flex='1';db.textContent='Löschen';db.onclick=()=>{if(confirm('Löschen?'))delSong(id);};
     footer.insertBefore(eb,footer.firstChild);footer.appendChild(db);
   }
+  // Make "+ Ins Repertoire" smaller too
+  const rb2=footer.querySelector('.btn-p');if(rb2){rb2.style.flex='1';rb2.classList.add('btn-sm');}
   openModal('m-song-detail');
 }
 
@@ -1093,7 +1095,8 @@ async function uploadSongFile(songId, fileType, inputEl){
 function openSongForm(id=null,prefill={}){
   editSongId=id;
   const s=id?cachedSongs.find(x=>x.id===id)||{}:prefill;
-  document.getElementById('sf-title-h').textContent=id?'Lied bearbeiten':'Lied hinzufügen';
+  const headerLiedanfang=id?(s.liedanfang||s.title||''):'';
+  document.getElementById('sf-title-h').innerHTML=id?`Lied bearbeiten<span style="font-family:var(--fb);font-weight:300;color:var(--text3);font-size:13px;margin-left:10px;padding-left:10px;border-left:1px solid var(--border2)">${esc(headerLiedanfang)}</span>`:'Lied hinzufügen';
   document.getElementById('sf-body').innerHTML=buildSongFormHTML(s,id);
   openModal('m-song-form');
   // Load existing files if editing
@@ -1124,10 +1127,9 @@ function buildSongFormHTML(s,id=null){
       <div class="fg"><label class="fl">Thema (Komma-getrennt)</label><input class="fi" id="sf-thema" value="${esc(s.thema||'')}" placeholder="z.B. Worship, Advent"></div>
     </div>
     <div class="fr2">
-      <div class="fg"><label class="fl">Anlass (Komma-getrennt)</label><input class="fi" id="sf-anlass" value="${esc(s.anlass||'')}" placeholder="z.B. Weihnachten, Gottesdienst"></div>
+      <div class="fg"><label class="fl">Bibelstelle</label><input class="fi" id="sf-bibel" value="${esc(s.bibelstelle||'')}" placeholder="z.B. Joh 3,16 · Ps 23"></div>
       <div class="fg"><label class="fl">Schrank</label><select class="fi" id="sf-schrank"><option value="">–</option><option value="Haupt" ${s.schrank==='Haupt'?'selected':''}>Haupt</option><option value="Neben" ${s.schrank==='Neben'?'selected':''}>Neben</option></select></div>
     </div>
-    <div class="fg"><label class="fl">Bibelstelle</label><input class="fi" id="sf-bibel" value="${esc(s.bibelstelle||'')}" placeholder="z.B. Joh 3,16 · Ps 23"></div>
   </div>
   <div class="fs"><div class="fst">Personen & Lebensdaten</div>
     <div class="fr2"><div class="fg"><label class="fl">Komponist</label><input class="fi" id="sf-komp" value="${esc(s.komponist||'')}" list="dl-komp" autocomplete="off" oninput="fillPersonLz(this,'sf-komp-lz','komponist')"></div><div class="fg"><label class="fl">Lebensdaten</label><input class="fi" id="sf-komp-lz" value="${esc(s.komponist_lz||'')}" placeholder="z.B. 1685–1750"></div></div>

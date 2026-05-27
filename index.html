@@ -1005,7 +1005,11 @@ async function openSongDetail(id){
       ${df('Übersetzer / Deutscher Text',s.uebersetzer)}${s.uebersetzer_lz?df('Lebensdaten',s.uebersetzer_lz):''}
     </div>
     <div class="ddiv"></div>
-    <div class="dgrid" style="margin-bottom:12px">${df('Originaltitel',s.originaltitel)}${df('Quelle',s.quelle)}${df('Nr.',s.quelle_nr)}${df('Rechte',s.rechte)}${df('Lizenz',s.lizenz)}</div>
+    <div class="dgrid" style="margin-bottom:12px">
+      ${df('Originaltitel',s.originaltitel)}
+      <div class="df"><div class="dl">Quelle / Nr.</div><div class="dv">${s.quelle||s.quelle_nr?[s.quelle,s.quelle_nr].filter(Boolean).join(' · '):''}</div></div>
+      <div class="df"><div class="dl">Rechte / Lizenz</div><div class="dv">${s.rechte||s.lizenz?[s.rechte,s.lizenz].filter(Boolean).join(' · '):''}</div></div>
+    </div>
     ${s.created_at?`<div style="font-size:10px;color:var(--text3);margin-bottom:10px">Eingetragen: ${fD(s.created_at?.slice(0,10))}</div>`:''}
     ${(s.links||[]).length?`<div class="ddiv"></div><div class="dl">Links</div><div style="margin-top:5px">${s.links.map(l=>`<a href="${esc(l)}" target="_blank" class="ffile">${esc(l.replace(/https?:\/\//,'').substring(0,30))}</a>`).join('')}</div>`:''}
     ${filesHtml}
@@ -3588,12 +3592,16 @@ async function importDbPdf(evt){
         +'- besetzung: Stimmbesetzung aus Notenbild erkennen (SATB=4 Stimmen gemischt, TTBB=Maennerchor, SSA=Frauenchor) oder aus Text\n'
         +'- bibelstelle: Bibelvers der angegeben ist (z.B. Psalm 23, Joh 3,16)\n'
         +'- quelle: Liederbuch-Angabe am Ende der Seite (z.B. Jesu Name nie verklinget IV - 919)\n'
+        +'- quelle_nr: Zuerst die Liednummer oben auf der Seite suchen (grosse Zahl oben links/rechts, z.B. "1", "42"). Falls nicht gefunden, Nummer aus der Quellenangabe am Seitenende (z.B. 919 aus "Jesu Name nie verklinget IV - 919").\n'
         +'- rechte: Copyright-Zeile\n'
         +'- thema: Thema des Liedes (z.B. Lob, Advent, Ostern, Trost)\n'
         +'- anlass: Kirchlicher Anlass (z.B. Gottesdienst, Weihnachten, Abendmahl)\n'
         +'\nAntworte NUR mit JSON-Array, kein Markdown:\n'
-        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]'
+        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","quelle_nr":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]'
         +'\nseite_von/seite_bis = GLOBALE Seitennummern im Gesamtdokument. Felder nicht gefunden = leer lassen.';
+      let raw='';
+      try{raw=await callClaude(chunkBase64,prompt);}
+      catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
       const chunk_songs=parseJsonSongs(raw);
       log('  -> '+chunk_songs.length+' Lieder in diesem Abschnitt erkannt');
       allSongs.push(...chunk_songs);
@@ -3617,7 +3625,9 @@ async function importDbPdf(evt){
         textdichter:s.textdichter||'',uebersetzer:s.uebersetzer||'',
         arrangeur:s.arrangeur||'',besetzung:s.besetzung||'',
         rechte:s.rechte||'',bibelstelle:s.bibelstelle||'',
-        thema:s.thema||'',anlass:s.anlass||'',quelle:s.quelle||'',
+        thema:s.thema||'',anlass:s.anlass||'',
+        quelle:manualQuelle||s.quelle||'',quelle_nr:s.quelle_nr||'',
+        lizenz:manualLizenz||s.lizenz||'',
         _seite_von:s.seite_von,_seite_bis:s.seite_bis,
         in_repertoire:false,created_by:currentUser.id
       });
@@ -3704,7 +3714,9 @@ async function reanalyzePdf(evt){
     const buf=await file.arrayBuffer();
     const srcPdf=await PDFLib.PDFDocument.load(buf);
     const totalPages=srcPdf.getPageCount();
-    log('PDF: '+totalPages+' Seiten');
+    const manualQuelle=(document.getElementById('db-manual-quelle')?.value||'').trim();
+    const manualLizenz=(document.getElementById('db-manual-lizenz')?.value||'').trim();
+    log('PDF: '+totalPages+' Seiten'+(manualQuelle?' | Quelle: '+manualQuelle:'')+(manualLizenz?' | Lizenz: '+manualLizenz:''));
 
     // Load all DB songs that have page info stored in song_files or need correction
     const{data:dbSongs}=await SB.from('songs').select('id,liedanfang,titel:title,komponist,textdichter,uebersetzer,arrangeur,besetzung,bibelstelle,quelle,thema,anlass,rechte').eq('in_repertoire',false).order('created_at');
@@ -3742,15 +3754,19 @@ async function reanalyzePdf(evt){
         +'- besetzung: Aus Notenbild (SATB=4 Stimmen gemischt, TTBB=Maennerchor, SSA=Frauenchor)\n'
         +'- bibelstelle: Bibelvers auf der Seite\n'
         +'- quelle: Liederbuch-Angabe am Seitenende\n'
+        +'- quelle_nr: Zuerst die Liednummer oben auf der Seite suchen (grosse Zahl oben links/rechts, z.B. "1", "42"). Falls nicht gefunden, die Nummer am Ende der Seite aus der Quellenangabe nehmen (z.B. 919 aus "Jesu Name nie verklinget IV - 919").\n'
         +'- rechte: Copyright-Zeile\n'
         +'- thema: Thema des Liedes\n'
         +'- anlass: Kirchlicher Anlass\n'
         +'Antworte NUR mit JSON-Array:\n'
-        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]\n'
+        +'[{"liedanfang":"","titel":"","originaltitel":"","komponist":"","textdichter":"","uebersetzer":"","arrangeur":"","besetzung":"","rechte":"","bibelstelle":"","quelle":"","quelle_nr":"","thema":"","anlass":"","seite_von":'+pageFrom+',"seite_bis":'+pageFrom+'}]\n'
         +'seite_von/seite_bis = globale Seitennummern. Felder nicht gefunden = leer lassen.';
 
-      const raw=await callClaude(chunkBase64,prompt);
+      let raw='';
+      try{raw=await callClaude(chunkBase64,prompt);}
+      catch(e){log('Chunk '+(ci+1)+' Fehler: '+e.message+' - weiter...');continue;}
       const chunkSongs=parseJsonSongs(raw);
+      log('  -> '+chunkSongs.length+' Lieder erkannt');
 
       // Match each found song to existing DB songs
       for(const cs of chunkSongs){
@@ -3767,7 +3783,7 @@ async function reanalyzePdf(evt){
         if(!match)continue;
         // Build update with improved/missing fields
         const upd={};
-        const fields=['liedanfang','titel','komponist','textdichter','uebersetzer','arrangeur','besetzung','bibelstelle','quelle','rechte','thema','anlass','originaltitel'];
+        const fields=['liedanfang','titel','komponist','textdichter','uebersetzer','arrangeur','besetzung','bibelstelle','quelle','quelle_nr','rechte','thema','anlass','originaltitel'];
         fields.forEach(f=>{
           const dbField=f==='titel'?'title':f;
           const newVal=(cs[f]||'').trim();
@@ -3830,6 +3846,10 @@ async function renderSettings(tab='members'){
       <div class="st" style="margin-top:16px">Liederdatenbank – PDF importieren</div>
       <div class="card" style="cursor:default">
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div>
+        <div class="fr2" style="margin-bottom:8px">
+          <div><label class="fl">Quelle (optional – überschreibt PDF-Quelle)</label><input class="fi" id="db-manual-quelle" placeholder="z.B. Jesu Name nie verklinget IV" style="margin-top:4px"></div>
+          <div><label class="fl">Lizenz (optional – überschreibt PDF-Lizenz)</label><input class="fi" id="db-manual-lizenz" placeholder="z.B. CCLI 123456" style="margin-top:4px"></div>
+        </div>
         <input type="file" id="db-pdf-input" accept=".pdf" style="display:none" onchange="importDbPdf(event)">
         <button class="btn btn-p" style="width:100%;margin-bottom:8px" onclick="document.getElementById('db-pdf-input').click()">📄 PDF hochladen &amp; analysieren</button>
         <div style="height:0.5px;background:var(--border);margin-bottom:8px"></div>

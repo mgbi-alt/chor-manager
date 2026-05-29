@@ -4834,7 +4834,57 @@ function renderReassign(songMap){
     dnBtn.onclick=()=>{swapPdfs(idx,idx+1);renderReassign(songMap);};
     if(idx===0)upBtn.disabled=true;
     if(idx===_reassignData.length-1)dnBtn.disabled=true;
-    tdBtns.appendChild(upBtn);tdBtns.appendChild(dnBtn);
+    // PDF preview button
+    const previewBtn=document.createElement('button');
+    previewBtn.className='btn btn-sm btn-g';previewBtn.textContent='👁';previewBtn.title='PDF-Vorschau';
+    previewBtn.style.cssText='padding:2px 7px;margin-left:4px';
+    previewBtn.onclick=async(e)=>{
+      e.stopPropagation();
+      const existing=document.getElementById('pdf-preview-popup');
+      if(existing)existing.remove();
+      if(!assignedRow?.file?.url){T('Keine PDF vorhanden','err');return;}
+      // Show loading popup
+      const popup=document.createElement('div');
+      popup.id='pdf-preview-popup';
+      popup.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7)';
+      popup.onclick=(ev)=>{if(ev.target===popup)popup.remove();};
+      const box=document.createElement('div');
+      box.style.cssText='background:var(--bg);border-radius:var(--r);padding:16px;max-width:520px;width:95vw;max-height:90vh;overflow:auto;position:relative';
+      const closeX=document.createElement('button');
+      closeX.className='mclose';closeX.textContent='×';closeX.style.cssText='position:absolute;top:10px;right:10px';
+      closeX.onclick=()=>popup.remove();
+      const title=document.createElement('div');
+      title.style.cssText='font-size:12px;color:var(--text3);margin-bottom:10px;padding-right:24px';
+      title.textContent=(pdfSong?.quelle_nr?'Nr. '+pdfSong.quelle_nr+' · ':'')+esc(pdfSong?.liedanfang||pdfSong?.title||'PDF');
+      const canvas=document.createElement('canvas');
+      canvas.style.cssText='width:100%;border-radius:4px;background:#fff';
+      const loadMsg=document.createElement('div');
+      loadMsg.style.cssText='font-size:12px;color:var(--text2);text-align:center;padding:20px';
+      loadMsg.textContent='Lade PDF…';
+      box.appendChild(closeX);box.appendChild(title);box.appendChild(loadMsg);
+      popup.appendChild(box);document.body.appendChild(popup);
+      try{
+        // Load pdfjs on demand
+        if(!window.pdfjsLib){
+          await new Promise((res,rej)=>{
+            const s=document.createElement('script');
+            s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+            s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};
+            s.onerror=rej;document.head.appendChild(s);
+          });
+        }
+        const resp=await fetch(assignedRow.file.url);
+        const buf=await resp.arrayBuffer();
+        const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+        const page=await pdf.getPage(1);
+        const viewport=page.getViewport({scale:1.5});
+        canvas.width=viewport.width;canvas.height=Math.min(viewport.height,viewport.width*0.5);
+        const ctx=canvas.getContext('2d');
+        await page.render({canvasContext:ctx,viewport,transform:[1,0,0,1,0,0]}).promise;
+        box.replaceChild(canvas,loadMsg);
+      }catch(err){loadMsg.textContent='Fehler: '+err.message;}
+    };
+    tdBtns.appendChild(upBtn);tdBtns.appendChild(dnBtn);tdBtns.appendChild(previewBtn);
     tr.appendChild(tdBtns);
 
     table.appendChild(tr);

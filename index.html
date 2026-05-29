@@ -462,6 +462,13 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="mb" id="quelle-browser-body" style="padding:14px"></div>
 </div></div>
 
+<!-- Backup -->
+<div class="mo" id="m-backup"><div class="md" style="max-height:96vh">
+  <div class="mhandle"></div>
+  <div class="mh"><h3>💾 Backup erstellen</h3><button class="mclose" onclick="closeModal('m-backup')">×</button></div>
+  <div class="mb" id="backup-body" style="padding:16px"></div>
+</div></div>
+
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
@@ -3973,6 +3980,7 @@ async function renderSettings(tab='members'){
         <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openBackup()">💾 Backup erstellen</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
@@ -4603,6 +4611,96 @@ async function openPdfMergeQueue(queue){
   document.querySelector('#m-merge .mh h3').textContent='📄 PDF – bereits vorhandene Lieder';
   openModal('m-merge');
   showMergeGroup();
+}
+
+
+// ========== BACKUP ==========
+const BACKUP_TABLES=['songs','song_files','events','event_songs','event_program','event_tasks','announcements','announcement_reads','attendance','profiles','cal_categories','calendar_events','media','media_albums','song_performance_stats'];
+
+function openBackup(){
+  const body=document.getElementById('backup-body');
+  const ts=new Date().toISOString().slice(0,10);
+  body.innerHTML=`
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Erstellt ein vollständiges Backup aller Datenbank-Tabellen als JSON sowie eine Liste aller Dateien im Storage.</div>
+
+    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Datenbank (JSON)</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Alle ${BACKUP_TABLES.length} Tabellen werden exportiert und als <code>backup-${ts}.json</code> heruntergeladen.</div>
+      <button class="btn btn-p" style="width:100%" onclick="runDbBackup('${ts}')">⬇ Datenbank-Backup herunterladen</button>
+    </div>
+
+    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">HTML-Seite</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Aktuelle Version dieser App als <code>index-${ts}.html</code> herunterladen.</div>
+      <button class="btn btn-g" style="width:100%" onclick="runPageBackup('${ts}')">⬇ Seite herunterladen</button>
+    </div>
+
+    <div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:12px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Dateien (Storage)</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Alle Datei-URLs aus dem Storage als <code>files-${ts}.json</code> exportieren. Die Dateien selbst können dann manuell heruntergeladen werden.</div>
+      <button class="btn btn-i" style="width:100%" onclick="runFilesBackup('${ts}')">⬇ Datei-Liste exportieren</button>
+    </div>
+
+    <div id="backup-log" style="margin-top:14px;font-size:12px;color:var(--text2)"></div>
+  `;
+  openModal('m-backup');
+}
+
+function backupLog(msg,type=''){
+  const el=document.getElementById('backup-log');
+  if(!el)return;
+  const line=document.createElement('div');
+  line.style.cssText='padding:3px 0;color:'+(type==='err'?'var(--err)':type==='ok'?'var(--success)':'var(--text2)');
+  line.textContent=msg;
+  el.appendChild(line);
+}
+
+async function runDbBackup(ts){
+  backupLog('Starte Datenbank-Backup…');
+  const backup={_created:new Date().toISOString(),_version:1,tables:{}};
+  for(const table of BACKUP_TABLES){
+    backupLog('Lade '+table+'…');
+    let allRows=[];
+    let from=0;
+    const pageSize=1000;
+    while(true){
+      const{data,error}=await SB.from(table).select('*').range(from,from+pageSize-1);
+      if(error){backupLog('Fehler bei '+table+': '+error.message,'err');break;}
+      if(!data||!data.length)break;
+      allRows=allRows.concat(data);
+      if(data.length<pageSize)break;
+      from+=pageSize;
+    }
+    backup.tables[table]=allRows;
+    backupLog('  ✓ '+table+': '+allRows.length+' Einträge','ok');
+  }
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='backup-'+ts+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  backupLog('✓ Datenbank-Backup heruntergeladen.','ok');
+}
+
+function runPageBackup(ts){
+  const html=document.documentElement.outerHTML;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='index-'+ts+'.html';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  backupLog('✓ Seite heruntergeladen.','ok');
+}
+
+async function runFilesBackup(ts){
+  backupLog('Lade Datei-Liste aus Storage…');
+  const{data:files,error}=await SB.from('song_files').select('id,song_id,file_type,url,path,created_at');
+  if(error){backupLog('Fehler: '+error.message,'err');return;}
+  const{data:media}=await SB.from('media').select('id,url,path,title,created_at');
+  const export_={_created:new Date().toISOString(),song_files:files||[],media:media||[]};
+  const blob=new Blob([JSON.stringify(export_,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='files-'+ts+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  backupLog('✓ '+(files?.length||0)+' Dateien + '+(media?.length||0)+' Medien exportiert.','ok');
 }
 
 // ========== INIT ==========

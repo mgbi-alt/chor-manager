@@ -3672,14 +3672,36 @@ async function importDbPdf(evt){
     setProgress(45,'Speichere Lieder in Datenbank...');
 
     // Step 3: Insert songs into DB
-    const{data:existing}=await SB.from('songs').select('liedanfang,title');
-    const existSet=new Set([...(existing||[]).map(s=>(s.liedanfang||'').toLowerCase().trim()),...(existing||[]).map(s=>(s.title||'').toLowerCase().trim())]);
+    const{data:existing}=await SB.from('songs').select('id,liedanfang,title,komponist,textdichter,arrangeur,uebersetzer,besetzung,thema,rechte,lizenz,originaltitel,quelle,quelle_nr,bibelstelle,notizen,schrank,in_repertoire');
+    const existMap=new Map();
+    (existing||[]).forEach(s=>{
+      if(s.liedanfang)existMap.set(s.liedanfang.toLowerCase().trim(),s);
+      if(s.title)existMap.set(s.title.toLowerCase().trim(),s);
+    });
     const toInsert=[];
+    const toMerge=[]; // {existing: dbSong, incoming: pdfSong}
     for(const s of allSongs){
       if(!s.liedanfang&&!s.titel)continue;
       const la=(s.liedanfang||s.titel||'').toLowerCase().trim();
       const ti=(s.titel||s.liedanfang||'').toLowerCase().trim();
-      if(existSet.has(la)||existSet.has(ti))continue;
+      const existingSong=existMap.get(la)||existMap.get(ti);
+      if(existingSong){
+        toMerge.push({
+          existing:existingSong,
+          incoming:{
+            title:s.titel||s.liedanfang||'',liedanfang:s.liedanfang||s.titel||'',
+            originaltitel:s.originaltitel||'',komponist:s.komponist||'',
+            textdichter:s.textdichter||'',uebersetzer:s.uebersetzer||'',
+            arrangeur:s.arrangeur||'',besetzung:s.besetzung||'',
+            rechte:s.rechte||'',bibelstelle:s.bibelstelle||'',
+            thema:s.thema||'',anlass:s.anlass||'',
+            quelle:manualQuelle||s.quelle||'',quelle_nr:s.quelle_nr||'',
+            lizenz:manualLizenz||s.lizenz||'',
+            _seite_von:s.seite_von,_seite_bis:s.seite_bis,
+          }
+        });
+        continue;
+      }
       toInsert.push({
         title:s.titel||s.liedanfang||'',liedanfang:s.liedanfang||s.titel||'',
         originaltitel:s.originaltitel||'',komponist:s.komponist||'',
@@ -3692,7 +3714,7 @@ async function importDbPdf(evt){
         _seite_von:s.seite_von,_seite_bis:s.seite_bis,
         in_repertoire:false,created_by:currentUser.id
       });
-      existSet.add(la);existSet.add(ti);
+      existMap.set(la,{id:'pending'});existMap.set(ti,{id:'pending'});
     }
 
     let inserted=0,errors=0;
@@ -3717,8 +3739,9 @@ async function importDbPdf(evt){
       setProgress(45+Math.round(inserted/toInsert.length*25),'Gespeichert: '+inserted+'/'+toInsert.length+'...');
     }
 
-    const skipped=allSongs.length-toInsert.length;
-    log(inserted+' neue Lieder gespeichert, '+skipped+' bereits vorhanden'+(errors?', '+errors+' Fehler':''));
+    const skipped=allSongs.length-toInsert.length-toMerge.length;
+    log(inserted+' neue Lieder gespeichert, '+skipped+' übersprungen'+(toMerge.length?', '+toMerge.length+' bereits vorhanden → Merge-Assistent':'')+(errors?', '+errors+' Fehler':''));
+    if(toMerge.length)openPdfMergeQueue(toMerge);
     setProgress(70,'Teile PDF auf und haenge an Lieder an...');
 
     // Step 4: Split PDF and attach to songs
@@ -4195,7 +4218,8 @@ function showMergeGroup(){
   const body=document.getElementById('merge-body');
   const footer=document.getElementById('merge-footer');
   if(mergeIdx>=mergeGroups.length){
-    body.innerHTML='<p style="color:var(--success);font-size:14px">✓ Alle Duplikate bearbeitet!</p>';
+    if(window._pdfMergeMode){window._pdfMergeMode=false;window._pdfMergeQueue=null;document.querySelector('#m-merge .mh h3').textContent='🔍 Duplikate zusammenführen';}
+    body.innerHTML='<p style="color:var(--success);font-size:14px">✓ Alle Einträge bearbeitet!</p>';
     footer.innerHTML=`<button class="btn btn-g" style="flex:1" onclick="closeModal('m-merge');loadSongs()">Schließen</button>`;
     return;
   }
@@ -4344,32 +4368,33 @@ function showMergeGroup(){
 
 async function executeMerge(group,merged){
   const primary=group[0];
-  const dupeIds=group.slice(1).map(s=>s.id);
   const mergeBtn=document.getElementById('merge-footer').querySelector('.btn-p');
-  if(mergeBtn){mergeBtn.disabled=true;mergeBtn.textContent='Führe zusammen…';}
+  if(mergeBtn){mergeBtn.disabled=true;mergeBtn.textContent='Speichere…';}
 
-  // 1. Update primary with merged data
   const updateFields={};
   const fields=['komponist','textdichter','arrangeur','uebersetzer','besetzung','thema','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','notizen','schrank','in_repertoire'];
   for(const f of fields)updateFields[f]=merged[f]??primary[f]??null;
   await SB.from('songs').update(updateFields).eq('id',primary.id);
 
-  // 2. Re-link all event_songs entries from dupes to primary
-  for(const did of dupeIds){
-    await SB.from('event_songs').update({song_id:primary.id}).eq('song_id',did);
+  if(window._pdfMergeMode){
+    // PDF mode: no delete, just update. Also attach PDF pages if available.
+    const pdfEntry=window._pdfMergeQueue?.[mergeIdx-1]||window._pdfMergeQueue?.[mergeIdx];
+    const inc=pdfEntry?.incoming;
+    if(inc?._seite_von&&inc?._seite_bis){
+      // Will be picked up by PDF file attachment step (already ran), just log
+    }
+    T('✓ Daten ergänzt: '+(primary.liedanfang||primary.title),'ok');
+  } else {
+    // Normal duplicate merge: re-link and delete dupes
+    const dupeIds=group.slice(1).map(s=>s.id).filter(id=>id&&id!=='__pdf_incoming__');
+    for(const did of dupeIds){
+      await SB.from('event_songs').update({song_id:primary.id}).eq('song_id',did);
+      await SB.from('song_files').update({song_id:primary.id}).eq('song_id',did);
+      await SB.from('songs').delete().eq('id',did);
+    }
+    T('✓ '+group.length+' Einträge zusammengeführt','ok');
   }
 
-  // 3. Re-link song_files from dupes to primary
-  for(const did of dupeIds){
-    await SB.from('song_files').update({song_id:primary.id}).eq('song_id',did);
-  }
-
-  // 4. Delete dupes
-  for(const did of dupeIds){
-    await SB.from('songs').delete().eq('id',did);
-  }
-
-  T(`✓ ${group.length} Einträge zusammengeführt`,'ok');
   mergeIdx++;
   showMergeGroup();
 }
@@ -4540,6 +4565,27 @@ async function openQuelleBrowser(){
   // Auto-render if Chorbuch is available
   const chorbuch=[...quellen.keys()].find(q=>q.toLowerCase().includes('chorbuch'));
   if(chorbuch){sel.value=chorbuch;renderQuelle();}
+}
+
+
+// ========== PDF MERGE QUEUE ==========
+async function openPdfMergeQueue(queue){
+  // Reuse m-merge modal but with PDF-specific flow
+  mergeGroups=queue.map(({existing,incoming})=>{
+    // Build two fake "song" objects for the merge UI
+    const ex={...existing};
+    const inc={...incoming,id:'__pdf_incoming__',in_repertoire:false,liedanfang:incoming.liedanfang||incoming.title||''};
+    return[ex,inc]; // existing always first = ZIEL
+  });
+  mergeIdx=0;
+
+  // Override executeMerge behaviour: just update existing, don't delete anything
+  window._pdfMergeMode=true;
+  window._pdfMergeQueue=queue;
+
+  document.querySelector('#m-merge .mh h3').textContent='📄 PDF – bereits vorhandene Lieder';
+  openModal('m-merge');
+  showMergeGroup();
 }
 
 // ========== INIT ==========

@@ -1050,6 +1050,15 @@ async function openSongDetail(id){
     const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='2';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-song-detail');openSongForm(id);};
     const db=document.createElement('button');db.className='btn btn-d btn-sm';db.style.flex='1';db.textContent='Löschen';db.onclick=()=>{if(confirm('Löschen?'))delSong(id);};
     footer.insertBefore(eb,footer.firstChild);footer.appendChild(db);
+    // Remove from repertoire button (only for repertoire songs)
+    if(s.in_repertoire!==false){
+      const rrb=document.createElement('button');
+      rrb.className='btn btn-sm';
+      rrb.style.cssText='flex:1;background:rgba(232,160,32,.1);color:#f5c06a;border:0.5px solid rgba(232,160,32,.25)';
+      rrb.textContent='↩ Aus Repertoire';
+      rrb.onclick=()=>{if(confirm('Lied "'+esc(s.liedanfang||s.title)+'" aus dem Repertoire entfernen? Es bleibt in der Datenbank.'))removeFromRepertoire(id);};
+      footer.insertBefore(rrb,db);
+    }
   }
   // Make "+ Ins Repertoire" smaller too
   const rb2=footer.querySelector('.btn-p');if(rb2){rb2.style.flex='1';rb2.classList.add('btn-sm');}
@@ -1185,6 +1194,14 @@ async function saveSong(){
   closeModal('m-song-form');renderSongs();T(editSongId?'Lied aktualisiert':'Lied hinzugefügt','ok');
 }
 async function delSong(id){await SB.from('songs').delete().eq('id',id);closeModal('m-song-detail');renderSongs();T('Lied gelöscht');}
+async function removeFromRepertoire(id){
+  const{error}=await SB.from('songs').update({in_repertoire:false}).eq('id',id);
+  if(error){T('Fehler: '+error.message,'err');return;}
+  const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=false;
+  closeModal('m-song-detail');
+  displaySongs(filteredSongs());updateFilterCount();
+  T('✓ Aus Repertoire entfernt','ok');
+}
 async function addToRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:true}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}

@@ -4757,154 +4757,192 @@ async function openPdfReassign(){
 function renderReassign(songMap){
   const body=document.getElementById('pdf-reassign-body');
   const footer=document.getElementById('pdf-reassign-footer');
+
+  // Widen modal for split layout
+  const md=document.querySelector('#m-pdf-reassign .md');
+  if(md)md.style.cssText='max-width:1100px;max-height:96vh;width:95vw';
+
+  body.style.cssText='padding:0;display:flex;flex-direction:column;height:calc(96vh - 120px)';
   body.innerHTML='';
 
-  // Info
-  const info=document.createElement('div');
-  info.style.cssText='font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--card);border-radius:var(--r);border:0.5px solid var(--border)';
-  info.innerHTML='Die Tabelle zeigt: <b>Lied</b> (aktueller DB-Eintrag) ↔ <b>PDF</b> (aktuell angehängte Datei). Mit den Pfeilen ↑↓ kannst du die PDF-Zuordnung verschieben. <b>Speichern</b> schreibt nur die Datenbank um — keine neuen Uploads nötig.';
-  body.appendChild(info);
+  // --- Top toolbar ---
+  const toolbar=document.createElement('div');
+  toolbar.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:0.5px solid var(--border);flex-shrink:0';
 
-  // Shift controls
-  const shiftWrap=document.createElement('div');
-  shiftWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap';
+  const infoSpan=document.createElement('span');
+  infoSpan.style.cssText='font-size:11px;color:var(--text2);flex:1;min-width:160px';
+  infoSpan.textContent='Lied anklicken → Vorschau rechts. Pfeile zum Verschieben der PDF.';
+  toolbar.appendChild(infoSpan);
+
   const shiftLabel=document.createElement('span');
-  shiftLabel.style.cssText='font-size:12px;color:var(--text2)';
-  shiftLabel.textContent='Alle PDFs verschieben um:';
-  shiftWrap.appendChild(shiftLabel);
+  shiftLabel.style.cssText='font-size:11px;color:var(--text3)';
+  shiftLabel.textContent='Alle verschieben:';
+  toolbar.appendChild(shiftLabel);
+
   [-2,-1,1,2].forEach(n=>{
     const btn=document.createElement('button');
-    btn.className='btn btn-g btn-sm';
-    btn.textContent=(n>0?'+':'')+n;
+    btn.className='btn btn-g btn-sm';btn.textContent=(n>0?'+':'')+n;
     btn.onclick=()=>{shiftAllPdfs(n);renderReassign(songMap);};
-    shiftWrap.appendChild(btn);
+    toolbar.appendChild(btn);
   });
+
   const resetBtn=document.createElement('button');
   resetBtn.className='btn btn-sm';resetBtn.textContent='↺ Reset';
   resetBtn.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
   resetBtn.onclick=()=>{_reassignData.forEach(r=>r.assignedTo=r.song.id);renderReassign(songMap);};
-  shiftWrap.appendChild(resetBtn);
-  body.appendChild(shiftWrap);
+  toolbar.appendChild(resetBtn);
+  body.appendChild(toolbar);
 
-  // Build lookup: assignedTo→file for display
-  const assignMap=new Map(_reassignData.map(r=>[r.song.id,r]));
+  // --- Split layout ---
+  const split=document.createElement('div');
+  split.style.cssText='display:flex;flex:1;overflow:hidden;min-height:0';
+  body.appendChild(split);
 
-  // Table
-  const table=document.createElement('div');
-  table.style.cssText='background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden';
+  // LEFT: song list
+  const listPane=document.createElement('div');
+  listPane.style.cssText='width:340px;flex-shrink:0;overflow-y:auto;border-right:0.5px solid var(--border)';
+  split.appendChild(listPane);
 
-  // Header
-  const hdr=document.createElement('div');
-  hdr.style.cssText='display:grid;grid-template-columns:30px 1fr 1fr 60px;gap:0;padding:6px 10px;background:var(--hover);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em';
-  hdr.innerHTML='<div>#</div><div>Lied (bleibt)</div><div>Zugeordnete PDF</div><div></div>';
-  table.appendChild(hdr);
+  // RIGHT: PDF preview
+  const previewPane=document.createElement('div');
+  previewPane.style.cssText='flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:var(--bg2,var(--bg));padding:12px;gap:8px';
+  previewPane.id='reassign-preview-pane';
+  previewPane.innerHTML='<div style="color:var(--text3);font-size:12px;margin-top:40px">← Lied anklicken für Vorschau</div>';
+  split.appendChild(previewPane);
 
-  _reassignData.forEach((row,idx)=>{
-    const tr=document.createElement('div');
-    const changed=row.assignedTo!==row.song.id;
-    tr.style.cssText='display:grid;grid-template-columns:30px 1fr 1fr 60px;gap:0;padding:7px 10px;border-top:0.5px solid var(--border);align-items:center;background:'+(changed?'rgba(91,141,238,.07)':'');
+  // Track selected index
+  let selectedIdx=0;
 
-    // Index
-    const tdIdx=document.createElement('div');
-    tdIdx.style.cssText='font-size:11px;color:var(--text3)';
-    tdIdx.textContent=row.song.quelle_nr||'–';
-    tr.appendChild(tdIdx);
-
-    // Song name
-    const tdSong=document.createElement('div');
-    tdSong.style.cssText='font-size:12px;padding-right:8px';
-    tdSong.textContent=row.song.liedanfang||row.song.title||'–';
-    tr.appendChild(tdSong);
-
-    // Assigned PDF (which song's file is currently mapped here)
-    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
-    const tdPdf=document.createElement('div');
-    tdPdf.style.cssText='font-size:12px;color:'+(changed?'#8fb3f5':'var(--text2)')+';padding-right:8px;display:flex;align-items:center;gap:6px';
-    const pdfSong=assignedRow?assignedRow.song:null;
-    tdPdf.innerHTML=(changed?'<span style="color:#8fb3f5">⚠</span>':'')
-      +(pdfSong?(pdfSong.quelle_nr?'<span style="color:var(--accent2);min-width:18px">'+pdfSong.quelle_nr+'</span> ':'')+esc(pdfSong.liedanfang||pdfSong.title||'–'):'<span style="color:var(--text3)">keine PDF</span>');
-    tr.appendChild(tdPdf);
-
-    // Move buttons
-    const tdBtns=document.createElement('div');
-    tdBtns.style.cssText='display:flex;gap:3px;justify-content:flex-end';
-    const upBtn=document.createElement('button');upBtn.className='btn btn-sm btn-g';upBtn.textContent='↑';upBtn.style.padding='2px 7px';
-    const dnBtn=document.createElement('button');dnBtn.className='btn btn-sm btn-g';dnBtn.textContent='↓';dnBtn.style.padding='2px 7px';
-    upBtn.onclick=()=>{swapPdfs(idx,idx-1);renderReassign(songMap);};
-    dnBtn.onclick=()=>{swapPdfs(idx,idx+1);renderReassign(songMap);};
-    if(idx===0)upBtn.disabled=true;
-    if(idx===_reassignData.length-1)dnBtn.disabled=true;
-    // PDF preview button
-    const previewBtn=document.createElement('button');
-    previewBtn.className='btn btn-sm btn-g';previewBtn.textContent='👁';previewBtn.title='PDF-Vorschau';
-    previewBtn.style.cssText='padding:2px 7px;margin-left:4px';
-    previewBtn.onclick=async(e)=>{
-      e.stopPropagation();
-      const existing=document.getElementById('pdf-preview-popup');
-      if(existing)existing.remove();
-      if(!assignedRow?.file?.url){T('Keine PDF vorhanden','err');return;}
-      // Show loading popup
-      const popup=document.createElement('div');
-      popup.id='pdf-preview-popup';
-      popup.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7)';
-      popup.onclick=(ev)=>{if(ev.target===popup)popup.remove();};
-      const box=document.createElement('div');
-      box.style.cssText='background:var(--bg);border-radius:var(--r);padding:16px;max-width:520px;width:95vw;max-height:90vh;overflow:auto;position:relative';
-      const closeX=document.createElement('button');
-      closeX.className='mclose';closeX.textContent='×';closeX.style.cssText='position:absolute;top:10px;right:10px';
-      closeX.onclick=()=>popup.remove();
-      const title=document.createElement('div');
-      title.style.cssText='font-size:12px;color:var(--text3);margin-bottom:10px;padding-right:24px';
-      title.textContent=(pdfSong?.quelle_nr?'Nr. '+pdfSong.quelle_nr+' · ':'')+esc(pdfSong?.liedanfang||pdfSong?.title||'PDF');
-      const canvas=document.createElement('canvas');
-      canvas.style.cssText='width:100%;border-radius:4px;background:#fff';
-      const loadMsg=document.createElement('div');
-      loadMsg.style.cssText='font-size:12px;color:var(--text2);text-align:center;padding:20px';
-      loadMsg.textContent='Lade PDF…';
-      box.appendChild(closeX);box.appendChild(title);box.appendChild(loadMsg);
-      popup.appendChild(box);document.body.appendChild(popup);
-      try{
-        // Load pdfjs on demand
-        if(!window.pdfjsLib){
-          await new Promise((res,rej)=>{
-            const s=document.createElement('script');
-            s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-            s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};
-            s.onerror=rej;document.head.appendChild(s);
-          });
-        }
-        const resp=await fetch(assignedRow.file.url);
-        const buf=await resp.arrayBuffer();
-        const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-        const page=await pdf.getPage(1);
-        const viewport=page.getViewport({scale:1.5});
-        canvas.width=viewport.width;canvas.height=Math.min(viewport.height,viewport.width*0.5);
-        const ctx=canvas.getContext('2d');
-        await page.render({canvasContext:ctx,viewport,transform:[1,0,0,1,0,0]}).promise;
-        box.replaceChild(canvas,loadMsg);
-      }catch(err){loadMsg.textContent='Fehler: '+err.message;}
-    };
-    tdBtns.appendChild(upBtn);tdBtns.appendChild(dnBtn);tdBtns.appendChild(previewBtn);
-    tr.appendChild(tdBtns);
-
-    table.appendChild(tr);
-  });
-  body.appendChild(table);
-
-  // Changed count
-  const changed=_reassignData.filter(r=>r.assignedTo!==r.song.id).length;
-  if(changed){
-    const note=document.createElement('div');
-    note.style.cssText='font-size:12px;color:#8fb3f5;margin-top:8px';
-    note.textContent=changed+' Zuordnung(en) geändert (blau markiert)';
-    body.appendChild(note);
+  function selectRow(idx){
+    selectedIdx=idx;
+    // Highlight row
+    listPane.querySelectorAll('.rr-row').forEach((el,i)=>el.classList.toggle('rr-selected',i===idx));
+    // Load preview
+    loadPreview(idx);
   }
 
+  async function loadPreview(idx){
+    const pane=document.getElementById('reassign-preview-pane');
+    if(!pane)return;
+    const row=_reassignData[idx];
+    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+    const fileUrl=assignedRow?.file?.url;
+
+    pane.innerHTML='';
+
+    // Preview header
+    const ph=document.createElement('div');
+    ph.style.cssText='width:100%;display:flex;align-items:center;gap:8px;flex-shrink:0';
+
+    const upBtn=document.createElement('button');upBtn.className='btn btn-g btn-sm';upBtn.textContent='↑ vorherige PDF';
+    upBtn.disabled=idx===0;
+    upBtn.onclick=()=>{swapPdfs(idx,idx-1);renderReassign(songMap);};
+
+    const dnBtn=document.createElement('button');dnBtn.className='btn btn-g btn-sm';dnBtn.textContent='↓ nächste PDF';
+    dnBtn.disabled=idx===_reassignData.length-1;
+    dnBtn.onclick=()=>{swapPdfs(idx,idx+1);renderReassign(songMap);};
+
+    const pdfLabel=document.createElement('div');
+    pdfLabel.style.cssText='flex:1;font-size:11px;color:var(--text2);text-align:center';
+    const pdfSong=assignedRow?.song;
+    pdfLabel.innerHTML='<b style="color:var(--text)">'+esc(row.song.liedanfang||row.song.title||'–')+'</b>'
+      +'<span style="color:var(--text3)"> → PDF: </span>'
+      +(pdfSong?(pdfSong.quelle_nr?'<b style="color:var(--accent2)">Nr.'+pdfSong.quelle_nr+'</b> ':'')+esc(pdfSong.liedanfang||pdfSong.title||'?'):'<i style="color:#e87070">keine PDF</i>');
+
+    ph.appendChild(upBtn);ph.appendChild(pdfLabel);ph.appendChild(dnBtn);
+    pane.appendChild(ph);
+
+    if(!fileUrl){
+      const msg=document.createElement('div');
+      msg.style.cssText='color:var(--text3);font-size:12px;margin-top:20px';
+      msg.textContent='Keine PDF zugeordnet.';
+      pane.appendChild(msg);return;
+    }
+
+    const loadMsg=document.createElement('div');
+    loadMsg.style.cssText='color:var(--text2);font-size:12px;margin-top:16px';
+    loadMsg.textContent='Lade PDF…';
+    pane.appendChild(loadMsg);
+
+    try{
+      if(!window.pdfjsLib){
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+          s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};
+          s.onerror=rej;document.head.appendChild(s);
+        });
+      }
+      const resp=await fetch(fileUrl);
+      const buf=await resp.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      const page=await pdf.getPage(1);
+      // Scale to ~25% of A4 at 96dpi ≈ width 200px
+      const naturalVp=page.getViewport({scale:1});
+      const scale=200/naturalVp.width;
+      const viewport=page.getViewport({scale});
+      const canvas=document.createElement('canvas');
+      canvas.width=viewport.width;canvas.height=viewport.height;
+      canvas.style.cssText='border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.4);background:#fff;max-width:100%';
+      pane.replaceChild(canvas,loadMsg);
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+    }catch(err){
+      loadMsg.textContent='Fehler: '+err.message;
+    }
+  }
+
+  // Build list rows
+  _reassignData.forEach((row,idx)=>{
+    const changed=row.assignedTo!==row.song.id;
+    const tr=document.createElement('div');
+    tr.className='rr-row';
+    tr.style.cssText='display:grid;grid-template-columns:28px 1fr auto;gap:0;padding:6px 10px;border-bottom:0.5px solid var(--border);align-items:center;cursor:pointer;transition:background .1s;background:'+(changed?'rgba(91,141,238,.07)':'');
+    tr.onclick=()=>selectRow(idx);
+
+    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+    const pdfSong=assignedRow?.song;
+
+    const tdNr=document.createElement('div');
+    tdNr.style.cssText='font-size:11px;color:var(--accent2);font-weight:600';
+    tdNr.textContent=row.song.quelle_nr||'–';
+
+    const tdName=document.createElement('div');
+    tdName.style.cssText='font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-right:6px';
+    tdName.textContent=row.song.liedanfang||row.song.title||'–';
+
+    const tdStatus=document.createElement('div');
+    tdStatus.style.cssText='font-size:10px;display:flex;flex-direction:column;align-items:flex-end;gap:2px';
+
+    if(changed){
+      const warn=document.createElement('span');
+      warn.style.cssText='color:#8fb3f5';warn.textContent='⚠ '+( pdfSong?.quelle_nr||'?');
+      tdStatus.appendChild(warn);
+    } else {
+      const ok=document.createElement('span');
+      ok.style.cssText='color:var(--text3)';ok.textContent='✓';
+      tdStatus.appendChild(ok);
+    }
+
+    tr.appendChild(tdNr);tr.appendChild(tdName);tr.appendChild(tdStatus);
+    listPane.appendChild(tr);
+  });
+
+  // Add selected style
+  const style=document.getElementById('rr-style')||document.createElement('style');
+  style.id='rr-style';
+  style.textContent='.rr-row:hover{background:var(--hover)!important}.rr-row.rr-selected{background:rgba(201,168,76,.1)!important;border-left:2px solid var(--accent)}';
+  document.head.appendChild(style);
+
+  // Auto-select first
+  selectRow(0);
+
+  // Footer
   footer.innerHTML='';
+  const changed=_reassignData.filter(r=>r.assignedTo!==r.song.id).length;
   const cancelBtn=document.createElement('button');cancelBtn.className='btn btn-g';cancelBtn.style.flex='1';cancelBtn.textContent='Abbrechen';
   cancelBtn.onclick=()=>closeModal('m-pdf-reassign');
   const saveBtn=document.createElement('button');saveBtn.className='btn btn-p';saveBtn.style.flex='2';
-  saveBtn.textContent='💾 Zuordnungen speichern ('+changed+' Änderungen)';
+  saveBtn.textContent='💾 Speichern ('+changed+' Änderungen)';
   saveBtn.disabled=changed===0;
   saveBtn.onclick=()=>savePdfReassign();
   footer.appendChild(cancelBtn);footer.appendChild(saveBtn);

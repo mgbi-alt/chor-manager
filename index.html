@@ -4757,195 +4757,347 @@ async function openPdfReassign(){
 function renderReassign(songMap){
   const body=document.getElementById('pdf-reassign-body');
   const footer=document.getElementById('pdf-reassign-footer');
-
-  // Widen modal for split layout
   const md=document.querySelector('#m-pdf-reassign .md');
   if(md)md.style.cssText='max-width:1100px;max-height:96vh;width:95vw';
+  body.style.cssText='padding:0;display:flex;flex-direction:column;height:calc(96vh - 110px)';
+  body.innerHTML='';footer.innerHTML='';
 
-  body.style.cssText='padding:0;display:flex;flex-direction:column;height:calc(96vh - 120px)';
-  body.innerHTML='';
-
-  // --- Top toolbar ---
-  const toolbar=document.createElement('div');
-  toolbar.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:0.5px solid var(--border);flex-shrink:0';
-
-  const infoSpan=document.createElement('span');
-  infoSpan.style.cssText='font-size:11px;color:var(--text2);flex:1;min-width:160px';
-  infoSpan.textContent='Lied anklicken → Vorschau rechts. Pfeile zum Verschieben der PDF.';
-  toolbar.appendChild(infoSpan);
-
-  const shiftLabel=document.createElement('span');
-  shiftLabel.style.cssText='font-size:11px;color:var(--text3)';
-  shiftLabel.textContent='Alle verschieben:';
-  toolbar.appendChild(shiftLabel);
-
-  [-2,-1,1,2].forEach(n=>{
-    const btn=document.createElement('button');
-    btn.className='btn btn-g btn-sm';btn.textContent=(n>0?'+':'')+n;
-    btn.onclick=()=>{shiftAllPdfs(n);renderReassign(songMap);};
-    toolbar.appendChild(btn);
-  });
-
-  const resetBtn=document.createElement('button');
-  resetBtn.className='btn btn-sm';resetBtn.textContent='↺ Reset';
-  resetBtn.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
-  resetBtn.onclick=()=>{_reassignData.forEach(r=>r.assignedTo=r.song.id);renderReassign(songMap);};
-  toolbar.appendChild(resetBtn);
-  body.appendChild(toolbar);
-
-  // --- Split layout ---
-  const split=document.createElement('div');
-  split.style.cssText='display:flex;flex:1;overflow:hidden;min-height:0';
-  body.appendChild(split);
-
-  // LEFT: song list
-  const listPane=document.createElement('div');
-  listPane.style.cssText='width:340px;flex-shrink:0;overflow-y:auto;border-right:0.5px solid var(--border)';
-  split.appendChild(listPane);
-
-  // RIGHT: PDF preview
-  const previewPane=document.createElement('div');
-  previewPane.style.cssText='flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:var(--bg2,var(--bg));padding:12px;gap:8px';
-  previewPane.id='reassign-preview-pane';
-  previewPane.innerHTML='<div style="color:var(--text3);font-size:12px;margin-top:40px">← Lied anklicken für Vorschau</div>';
-  split.appendChild(previewPane);
-
-  // Track selected index
-  let selectedIdx=0;
-
-  function selectRow(idx){
-    selectedIdx=idx;
-    // Highlight row
-    listPane.querySelectorAll('.rr-row').forEach((el,i)=>el.classList.toggle('rr-selected',i===idx));
-    // Load preview
-    loadPreview(idx);
-  }
-
-  async function loadPreview(idx){
-    const pane=document.getElementById('reassign-preview-pane');
-    if(!pane)return;
-    const row=_reassignData[idx];
-    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
-    const fileUrl=assignedRow?.file?.url;
-
-    pane.innerHTML='';
-
-    // Preview header
-    const ph=document.createElement('div');
-    ph.style.cssText='width:100%;display:flex;align-items:center;gap:8px;flex-shrink:0';
-
-    const upBtn=document.createElement('button');upBtn.className='btn btn-g btn-sm';upBtn.textContent='↑ vorherige PDF';
-    upBtn.disabled=idx===0;
-    upBtn.onclick=()=>{swapPdfs(idx,idx-1);renderReassign(songMap);};
-
-    const dnBtn=document.createElement('button');dnBtn.className='btn btn-g btn-sm';dnBtn.textContent='↓ nächste PDF';
-    dnBtn.disabled=idx===_reassignData.length-1;
-    dnBtn.onclick=()=>{swapPdfs(idx,idx+1);renderReassign(songMap);};
-
-    const pdfLabel=document.createElement('div');
-    pdfLabel.style.cssText='flex:1;font-size:11px;color:var(--text2);text-align:center';
-    const pdfSong=assignedRow?.song;
-    pdfLabel.innerHTML='<b style="color:var(--text)">'+esc(row.song.liedanfang||row.song.title||'–')+'</b>'
-      +'<span style="color:var(--text3)"> → PDF: </span>'
-      +(pdfSong?(pdfSong.quelle_nr?'<b style="color:var(--accent2)">Nr.'+pdfSong.quelle_nr+'</b> ':'')+esc(pdfSong.liedanfang||pdfSong.title||'?'):'<i style="color:#e87070">keine PDF</i>');
-
-    ph.appendChild(upBtn);ph.appendChild(pdfLabel);ph.appendChild(dnBtn);
-    pane.appendChild(ph);
-
-    if(!fileUrl){
-      const msg=document.createElement('div');
-      msg.style.cssText='color:var(--text3);font-size:12px;margin-top:20px';
-      msg.textContent='Keine PDF zugeordnet.';
-      pane.appendChild(msg);return;
-    }
-
-    const loadMsg=document.createElement('div');
-    loadMsg.style.cssText='color:var(--text2);font-size:12px;margin-top:16px';
-    loadMsg.textContent='Lade PDF…';
-    pane.appendChild(loadMsg);
-
-    try{
-      if(!window.pdfjsLib){
-        await new Promise((res,rej)=>{
-          const s=document.createElement('script');
-          s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-          s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};
-          s.onerror=rej;document.head.appendChild(s);
-        });
-      }
-      const resp=await fetch(fileUrl);
-      const buf=await resp.arrayBuffer();
-      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-      const page=await pdf.getPage(1);
-      // Scale to ~25% of A4 at 96dpi ≈ width 200px
-      const naturalVp=page.getViewport({scale:1});
-      const scale=200/naturalVp.width;
-      const viewport=page.getViewport({scale});
-      const canvas=document.createElement('canvas');
-      canvas.width=viewport.width;canvas.height=viewport.height;
-      canvas.style.cssText='border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.4);background:#fff;max-width:100%';
-      pane.replaceChild(canvas,loadMsg);
-      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-    }catch(err){
-      loadMsg.textContent='Fehler: '+err.message;
-    }
-  }
-
-  // Build list rows
-  _reassignData.forEach((row,idx)=>{
-    const changed=row.assignedTo!==row.song.id;
-    const tr=document.createElement('div');
-    tr.className='rr-row';
-    tr.style.cssText='display:grid;grid-template-columns:28px 1fr auto;gap:0;padding:6px 10px;border-bottom:0.5px solid var(--border);align-items:center;cursor:pointer;transition:background .1s;background:'+(changed?'rgba(91,141,238,.07)':'');
-    tr.onclick=()=>selectRow(idx);
-
-    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
-    const pdfSong=assignedRow?.song;
-
-    const tdNr=document.createElement('div');
-    tdNr.style.cssText='font-size:11px;color:var(--accent2);font-weight:600';
-    tdNr.textContent=row.song.quelle_nr||'–';
-
-    const tdName=document.createElement('div');
-    tdName.style.cssText='font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-right:6px';
-    tdName.textContent=row.song.liedanfang||row.song.title||'–';
-
-    const tdStatus=document.createElement('div');
-    tdStatus.style.cssText='font-size:10px;display:flex;flex-direction:column;align-items:flex-end;gap:2px';
-
-    if(changed){
-      const warn=document.createElement('span');
-      warn.style.cssText='color:#8fb3f5';warn.textContent='⚠ '+( pdfSong?.quelle_nr||'?');
-      tdStatus.appendChild(warn);
-    } else {
-      const ok=document.createElement('span');
-      ok.style.cssText='color:var(--text3)';ok.textContent='✓';
-      tdStatus.appendChild(ok);
-    }
-
-    tr.appendChild(tdNr);tr.appendChild(tdName);tr.appendChild(tdStatus);
-    listPane.appendChild(tr);
-  });
-
-  // Add selected style
   const style=document.getElementById('rr-style')||document.createElement('style');
   style.id='rr-style';
-  style.textContent='.rr-row:hover{background:var(--hover)!important}.rr-row.rr-selected{background:rgba(201,168,76,.1)!important;border-left:2px solid var(--accent)}';
+  style.textContent=`
+    .rr-row{display:grid;grid-template-columns:28px 1fr auto auto;gap:0;padding:5px 10px;border-bottom:0.5px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
+    .rr-row:hover{background:var(--hover)}
+    .rr-row.rr-sel{background:rgba(201,168,76,.1);border-left:2px solid var(--accent)}
+    .rr-row.rr-ok{opacity:.45}
+    .rr-row.rr-bad{background:rgba(232,112,112,.07)}
+    .rr-thumb{border-radius:3px;box-shadow:0 1px 6px rgba(0,0,0,.4);background:#fff;display:block}
+  `;
   document.head.appendChild(style);
 
-  // Auto-select first
-  selectRow(0);
+  // Phase tracking per row
+  if(!_reassignData[0].hasOwnProperty('status')){
+    _reassignData.forEach(r=>r.status='pending'); // pending | ok | bad
+  }
 
-  // Footer
-  footer.innerHTML='';
-  const changed=_reassignData.filter(r=>r.assignedTo!==r.song.id).length;
-  const cancelBtn=document.createElement('button');cancelBtn.className='btn btn-g';cancelBtn.style.flex='1';cancelBtn.textContent='Abbrechen';
-  cancelBtn.onclick=()=>closeModal('m-pdf-reassign');
-  const saveBtn=document.createElement('button');saveBtn.className='btn btn-p';saveBtn.style.flex='2';
-  saveBtn.textContent='💾 Speichern ('+changed+' Änderungen)';
-  saveBtn.disabled=changed===0;
-  saveBtn.onclick=()=>savePdfReassign();
-  footer.appendChild(cancelBtn);footer.appendChild(saveBtn);
+  let selectedIdx=0;
+  let phase=_reassignData.some(r=>r.status==='bad')?'gallery':'review';
+
+  function buildUI(){
+    body.innerHTML='';footer.innerHTML='';
+    if(phase==='review') buildReviewUI();
+    else buildGalleryUI();
+  }
+
+  // ===== PHASE 1: REVIEW =====
+  function buildReviewUI(){
+    // Toolbar
+    const tb=document.createElement('div');
+    tb.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:0.5px solid var(--border);flex-shrink:0;flex-wrap:wrap';
+    tb.innerHTML='<span style="font-size:11px;color:var(--text2);flex:1">Klicke auf ein Lied → PDF prüfen → ✓ Passt / ✗ Falsch markieren</span>';
+
+    const shiftLabel=document.createElement('span');shiftLabel.style.cssText='font-size:11px;color:var(--text3)';shiftLabel.textContent='Alle verschieben:';
+    tb.appendChild(shiftLabel);
+    [-2,-1,1,2].forEach(n=>{
+      const btn=document.createElement('button');btn.className='btn btn-g btn-sm';btn.textContent=(n>0?'+':'')+n;
+      btn.onclick=()=>{shiftAllPdfs(n);_reassignData.forEach(r=>r.status='pending');buildUI();};tb.appendChild(btn);
+    });
+    const rst=document.createElement('button');rst.className='btn btn-sm';rst.textContent='↺ Reset';
+    rst.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
+    rst.onclick=()=>{_reassignData.forEach(r=>{r.assignedTo=r.song.id;r.status='pending';});buildUI();};
+    tb.appendChild(rst);
+    body.appendChild(tb);
+
+    // Split
+    const split=document.createElement('div');
+    split.style.cssText='display:flex;flex:1;overflow:hidden;min-height:0';
+    body.appendChild(split);
+
+    // Left list
+    const listPane=document.createElement('div');
+    listPane.id='rr-list';
+    listPane.style.cssText='width:280px;flex-shrink:0;overflow-y:auto;border-right:0.5px solid var(--border)';
+    split.appendChild(listPane);
+
+    // Right preview
+    const prevPane=document.createElement('div');
+    prevPane.id='rr-prev';
+    prevPane.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px';
+    split.appendChild(prevPane);
+
+    function renderList(){
+      listPane.innerHTML='';
+      _reassignData.forEach((row,idx)=>{
+        const changed=row.assignedTo!==row.song.id;
+        const tr=document.createElement('div');
+        tr.className='rr-row'+(idx===selectedIdx?' rr-sel':'')+(row.status==='ok'?' rr-ok':row.status==='bad'?' rr-bad':'');
+        const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+        const pdfSong=assignedRow?.song;
+
+        const nr=document.createElement('div');nr.style.cssText='font-size:11px;color:var(--accent2);font-weight:600';nr.textContent=row.song.quelle_nr||'–';
+        const name=document.createElement('div');name.style.cssText='font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis';name.textContent=row.song.liedanfang||row.song.title||'–';
+        const pdfNr=document.createElement('div');pdfNr.style.cssText='font-size:10px;color:'+(changed?'#8fb3f5':'var(--text3)')+';min-width:20px;text-align:right';pdfNr.textContent=pdfSong?.quelle_nr||'–';
+        const badge=document.createElement('div');badge.style.cssText='font-size:11px;min-width:16px;text-align:right';
+        badge.textContent=row.status==='ok'?'✓':row.status==='bad'?'✗':'';
+        badge.style.color=row.status==='ok'?'var(--success)':row.status==='bad'?'#e87070':'';
+
+        tr.appendChild(nr);tr.appendChild(name);tr.appendChild(pdfNr);tr.appendChild(badge);
+        tr.onclick=()=>{selectedIdx=idx;renderList();loadPreview(idx);};
+        listPane.appendChild(tr);
+      });
+      // Scroll selected into view
+      const sel=listPane.querySelector('.rr-sel');
+      if(sel)sel.scrollIntoView({block:'nearest'});
+    }
+
+    async function loadPreview(idx){
+      const pane=document.getElementById('rr-prev');if(!pane)return;
+      const row=_reassignData[idx];
+      const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+      const pdfSong=assignedRow?.song;
+      pane.innerHTML='';
+
+      // Header with song info + mark buttons
+      const ph=document.createElement('div');
+      ph.style.cssText='width:100%;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap';
+
+      const lbl=document.createElement('div');
+      lbl.style.cssText='flex:1;font-size:12px';
+      lbl.innerHTML='<b>'+esc(row.song.liedanfang||row.song.title||'–')+'</b>'
+        +'<span style="color:var(--text3)"> → PDF: </span>'
+        +(pdfSong?((pdfSong.quelle_nr?'<b style="color:var(--accent2)">Nr.'+pdfSong.quelle_nr+' </b>':'')+esc(pdfSong.liedanfang||pdfSong.title||'?')):'<i style="color:#e87070">keine</i>');
+      ph.appendChild(lbl);
+
+      const okBtn=document.createElement('button');okBtn.className='btn btn-sm';
+      okBtn.style.cssText='background:rgba(76,175,130,.15);color:var(--success);border:0.5px solid rgba(76,175,130,.3);font-size:13px;padding:4px 14px';
+      okBtn.textContent='✓ Passt';
+      okBtn.onclick=()=>{row.status='ok';advanceToNext(idx);};
+
+      const badBtn=document.createElement('button');badBtn.className='btn btn-sm';
+      badBtn.style.cssText='background:rgba(232,112,112,.15);color:#e87070;border:0.5px solid rgba(232,112,112,.3);font-size:13px;padding:4px 14px';
+      badBtn.textContent='✗ Falsch';
+      badBtn.onclick=()=>{row.status='bad';advanceToNext(idx);};
+
+      ph.appendChild(okBtn);ph.appendChild(badBtn);
+      pane.appendChild(ph);
+
+      // Nav arrows
+      const nav=document.createElement('div');
+      nav.style.cssText='width:100%;display:flex;justify-content:space-between';
+      const prevBtn=document.createElement('button');prevBtn.className='btn btn-g btn-sm';prevBtn.textContent='↑ voriges';prevBtn.disabled=idx===0;
+      prevBtn.onclick=()=>{selectedIdx=idx-1;renderList();loadPreview(idx-1);};
+      const nextBtn=document.createElement('button');nextBtn.className='btn btn-g btn-sm';nextBtn.textContent='nächstes ↓';nextBtn.disabled=idx===_reassignData.length-1;
+      nextBtn.onclick=()=>{selectedIdx=idx+1;renderList();loadPreview(idx+1);};
+      nav.appendChild(prevBtn);nav.appendChild(nextBtn);
+      pane.appendChild(nav);
+
+      if(!assignedRow?.file?.url){
+        pane.innerHTML+='<div style="color:var(--text3);font-size:12px">Keine PDF</div>';return;
+      }
+
+      const loadMsg=document.createElement('div');loadMsg.style.cssText='color:var(--text2);font-size:12px';loadMsg.textContent='Lade…';
+      pane.appendChild(loadMsg);
+
+      try{
+        if(!window.pdfjsLib){
+          await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};s.onerror=rej;document.head.appendChild(s);});
+        }
+        const resp=await fetch(assignedRow.file.url);
+        const buf=await resp.arrayBuffer();
+        const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+        const page=await pdf.getPage(1);
+        // Render top 10% at ~400px wide
+        const naturalVp=page.getViewport({scale:1});
+        const scale=400/naturalVp.width;
+        const fullVp=page.getViewport({scale});
+        const cropH=Math.round(fullVp.height*0.12); // top 12%
+        const canvas=document.createElement('canvas');
+        canvas.width=fullVp.width;canvas.height=cropH;
+        canvas.className='rr-thumb';canvas.style.width='100%';
+        pane.replaceChild(canvas,loadMsg);
+        await page.render({canvasContext:canvas.getContext('2d'),viewport:fullVp}).promise;
+      }catch(err){loadMsg.textContent='Fehler: '+err.message;}
+    }
+
+    function advanceToNext(fromIdx){
+      renderList();
+      // Move to next pending
+      const next=_reassignData.findIndex((r,i)=>i>fromIdx&&r.status==='pending');
+      const nextIdx=next>=0?next:_reassignData.findIndex((r,i)=>i<fromIdx&&r.status==='pending');
+      if(nextIdx>=0){selectedIdx=nextIdx;renderList();loadPreview(nextIdx);}
+      else{
+        // All reviewed - update footer
+        const badCount=_reassignData.filter(r=>r.status==='bad').length;
+        const okCount=_reassignData.filter(r=>r.status==='ok').length;
+        buildFooter(badCount,okCount);
+        loadPreview(fromIdx);
+      }
+    }
+
+    renderList();
+    loadPreview(selectedIdx);
+
+    function buildFooter(badCount,okCount){
+      footer.innerHTML='';
+      if(badCount>0){
+        const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
+        info.textContent=okCount+' ✓ korrekt · '+badCount+' ✗ falsch → Galerie zur Korrektur';
+        footer.appendChild(info);
+        const gallBtn=document.createElement('button');gallBtn.className='btn btn-p';gallBtn.style.flex='2';
+        gallBtn.textContent='🖼 Falsche PDFs korrigieren ('+badCount+')';
+        gallBtn.onclick=()=>{phase='gallery';buildUI();};
+        footer.appendChild(gallBtn);
+      } else {
+        const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--success);flex:1;align-self:center';
+        info.textContent='Alle '+okCount+' PDFs als korrekt markiert!';
+        footer.appendChild(info);
+      }
+      const saveBtn=document.createElement('button');saveBtn.className='btn btn-g';saveBtn.style.flex='1';
+      saveBtn.textContent='💾 Speichern';saveBtn.onclick=()=>savePdfReassign();
+      footer.appendChild(saveBtn);
+    }
+
+    const initBad=_reassignData.filter(r=>r.status==='bad').length;
+    const initOk=_reassignData.filter(r=>r.status==='ok').length;
+    if(initBad>0||initOk===_reassignData.length)buildFooter(initBad,initOk);
+    else{
+      footer.innerHTML='';
+      const hint=document.createElement('div');hint.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
+      hint.textContent='Alle Lieder prüfen und markieren';footer.appendChild(hint);
+    }
+  }
+
+  // ===== PHASE 2: GALLERY =====
+  async function buildGalleryUI(){
+    const badRows=_reassignData.filter(r=>r.status==='bad');
+    const allRows=_reassignData;
+    let gallerySelectedBad=0;
+
+    body.innerHTML='';footer.innerHTML='';
+
+    const tb=document.createElement('div');
+    tb.style.cssText='display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:0.5px solid var(--border);flex-shrink:0';
+    tb.innerHTML='<span style="font-size:11px;color:var(--text2);flex:1">Links: falsche Lieder. Rechts: alle PDFs zur Auswahl. Klick auf die richtige PDF.</span>';
+    const backBtn=document.createElement('button');backBtn.className='btn btn-g btn-sm';backBtn.textContent='← Zurück zur Prüfung';
+    backBtn.onclick=()=>{phase='review';buildUI();};
+    tb.appendChild(backBtn);body.appendChild(tb);
+
+    const split=document.createElement('div');
+    split.style.cssText='display:flex;flex:1;overflow:hidden;min-height:0';
+    body.appendChild(split);
+
+    // Left: bad songs list
+    const leftPane=document.createElement('div');
+    leftPane.style.cssText='width:220px;flex-shrink:0;border-right:0.5px solid var(--border);overflow-y:auto';
+    split.appendChild(leftPane);
+
+    // Right: PDF gallery
+    const rightPane=document.createElement('div');
+    rightPane.id='gallery-pane';
+    rightPane.style.cssText='flex:1;overflow-y:auto;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start';
+    split.appendChild(rightPane);
+
+    let gallerySelIdx=0;
+
+    function renderBadList(){
+      leftPane.innerHTML='';
+      const title=document.createElement('div');title.style.cssText='font-size:10px;color:var(--text3);text-transform:uppercase;padding:8px 10px 4px;letter-spacing:.06em';
+      title.textContent='Falsche PDFs ('+badRows.length+')';leftPane.appendChild(title);
+      badRows.forEach((row,i)=>{
+        const tr=document.createElement('div');
+        tr.style.cssText='padding:6px 10px;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:12px;transition:background .1s;background:'+(i===gallerySelIdx?'rgba(201,168,76,.1)':'');
+        tr.onmouseenter=()=>{if(i!==gallerySelIdx)tr.style.background='var(--hover)';};
+        tr.onmouseleave=()=>{tr.style.background=i===gallerySelIdx?'rgba(201,168,76,.1)':'';};
+        tr.innerHTML=(row.song.quelle_nr?'<b style="color:var(--accent2)">'+row.song.quelle_nr+'</b> ':'')
+          +'<span>'+esc(row.song.liedanfang||row.song.title||'–')+'</span>'
+          +(row.assignedTo!==row.song.id?'<div style="font-size:10px;color:#8fb3f5">→ umgeleitet</div>':'');
+        tr.onclick=()=>{gallerySelIdx=i;renderBadList();};
+        leftPane.appendChild(tr);
+      });
+    }
+
+    // Load all PDF thumbnails
+    async function loadGallery(){
+      const pane=document.getElementById('gallery-pane');if(!pane)return;
+      pane.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px">Lade PDFs…</div>';
+
+      if(!window.pdfjsLib){
+        await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';res();};s.onerror=rej;document.head.appendChild(s);});
+      }
+      pane.innerHTML='';
+
+      for(const row of allRows){
+        const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+        const fileUrl=assignedRow?.file?.url;
+        if(!fileUrl)continue;
+
+        const card=document.createElement('div');
+        card.style.cssText='border:1.5px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s;width:130px;flex-shrink:0';
+        card.title='Nr. '+(row.song.quelle_nr||'?')+' · '+esc(row.song.liedanfang||'');
+
+        const label=document.createElement('div');
+        label.style.cssText='font-size:10px;color:var(--accent2);padding:3px 6px;background:var(--card);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+        label.textContent=(row.song.quelle_nr?'Nr.'+row.song.quelle_nr+' ':'')+esc(row.song.liedanfang||row.song.title||'–').substring(0,20);
+
+        const canvasWrap=document.createElement('div');
+        canvasWrap.style.cssText='background:#fff;height:90px;overflow:hidden;display:flex;align-items:flex-start';
+        const loadingEl=document.createElement('div');
+        loadingEl.style.cssText='font-size:10px;color:#999;padding:6px;width:100%';loadingEl.textContent='…';
+        canvasWrap.appendChild(loadingEl);
+
+        card.appendChild(label);card.appendChild(canvasWrap);
+        card.onclick=()=>{
+          // Assign this PDF to currently selected bad song
+          const targetRow=badRows[gallerySelIdx];
+          if(!targetRow)return;
+          targetRow.assignedTo=row.song.id;
+          targetRow.status='ok';
+          // Highlight selected card
+          pane.querySelectorAll('[data-song-id]').forEach(c=>{c.style.borderColor='var(--border)';c.style.transform='';});
+          card.style.borderColor='var(--success)';card.style.transform='scale(1.04)';
+          renderBadList();
+          // Auto-advance to next bad
+          const nextBadIdx=badRows.findIndex((r,i)=>i>gallerySelIdx&&r.status==='bad');
+          if(nextBadIdx>=0){gallerySelIdx=nextBadIdx;renderBadList();}
+          buildGalleryFooter();
+        };
+        card.dataset.songId=row.song.id;
+        pane.appendChild(card);
+
+        // Async render thumbnail
+        (async()=>{
+          try{
+            const resp=await fetch(fileUrl);const buf=await resp.arrayBuffer();
+            const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+            const page=await pdf.getPage(1);
+            const naturalVp=page.getViewport({scale:1});
+            const scale=130/naturalVp.width;
+            const fullVp=page.getViewport({scale});
+            const cropH=Math.round(fullVp.height*0.14);
+            const canvas=document.createElement('canvas');canvas.width=fullVp.width;canvas.height=cropH;
+            canvas.style.cssText='width:100%;display:block';
+            canvasWrap.replaceChild(canvas,loadingEl);
+            await page.render({canvasContext:canvas.getContext('2d'),viewport:fullVp}).promise;
+          }catch(e){loadingEl.textContent='!';}
+        })();
+      }
+    }
+
+    function buildGalleryFooter(){
+      footer.innerHTML='';
+      const stillBad=badRows.filter(r=>r.status==='bad').length;
+      const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
+      info.textContent=stillBad>0?(stillBad+' noch offen'):'Alle korrigiert ✓';info.style.color=stillBad?'var(--text2)':'var(--success)';
+      footer.appendChild(info);
+      const saveBtn=document.createElement('button');saveBtn.className='btn btn-p';saveBtn.style.flex='2';
+      saveBtn.textContent='💾 Speichern';saveBtn.onclick=()=>savePdfReassign();footer.appendChild(saveBtn);
+    }
+
+    renderBadList();
+    await loadGallery();
+    buildGalleryFooter();
+  }
+
+  buildUI();
 }
 
 function shiftAllPdfs(n){

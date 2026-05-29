@@ -469,6 +469,14 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="mb" id="backup-body" style="padding:16px"></div>
 </div></div>
 
+<!-- PDF Reassign -->
+<div class="mo" id="m-pdf-reassign"><div class="md" style="max-width:900px;max-height:96vh">
+  <div class="mhandle"></div>
+  <div class="mh"><h3>🔧 PDF-Zuordnung korrigieren</h3><button class="mclose" onclick="closeModal('m-pdf-reassign')">×</button></div>
+  <div class="mb" id="pdf-reassign-body" style="padding:14px"></div>
+  <div class="mf" id="pdf-reassign-footer"></div>
+</div></div>
+
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
@@ -3989,6 +3997,7 @@ async function renderSettings(tab='members'){
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openBackup()">💾 Backup erstellen</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openPdfReassign()">🔧 PDF-Zuordnung korrigieren</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
@@ -4709,6 +4718,193 @@ async function runFilesBackup(ts){
   const a=document.createElement('a');a.href=url;a.download='files-'+ts+'.json';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),5000);
   backupLog('✓ '+(files?.length||0)+' Dateien + '+(media?.length||0)+' Medien exportiert.','ok');
+}
+
+
+// ========== PDF REASSIGN ==========
+let _reassignData=[];
+
+async function openPdfReassign(){
+  const body=document.getElementById('pdf-reassign-body');
+  const footer=document.getElementById('pdf-reassign-footer');
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
+  footer.innerHTML='';
+  openModal('m-pdf-reassign');
+
+  // Load all songs with chorsatz files
+  const{data:files}=await SB.from('song_files').select('id,song_id,url,path,file_type').eq('file_type','chorsatz');
+  const{data:songs}=await SB.from('songs').select('id,liedanfang,title,quelle_nr,quelle').order('quelle_nr',{ascending:true,nullsFirst:false});
+  if(!files||!songs){body.innerHTML='<p style="color:var(--err)">Fehler beim Laden.</p>';return;}
+
+  // Build map song_id→song
+  const songMap=new Map(songs.map(s=>[s.id,s]));
+  // Build map song_id→file
+  const fileMap=new Map(files.map(f=>[f.song_id,f]));
+
+  // Only songs that have a chorsatz file
+  const withFile=songs.filter(s=>fileMap.has(s.id));
+
+  // Store as reassignable list: [{song, file, assignedTo (song_id)}]
+  _reassignData=withFile.map(s=>({
+    song:s,
+    file:fileMap.get(s.id),
+    assignedTo:s.id, // currently correct mapping (song owns its file)
+  }));
+
+  renderReassign(songMap);
+}
+
+function renderReassign(songMap){
+  const body=document.getElementById('pdf-reassign-body');
+  const footer=document.getElementById('pdf-reassign-footer');
+  body.innerHTML='';
+
+  // Info
+  const info=document.createElement('div');
+  info.style.cssText='font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--card);border-radius:var(--r);border:0.5px solid var(--border)';
+  info.innerHTML='Die Tabelle zeigt: <b>Lied</b> (aktueller DB-Eintrag) ↔ <b>PDF</b> (aktuell angehängte Datei). Mit den Pfeilen ↑↓ kannst du die PDF-Zuordnung verschieben. <b>Speichern</b> schreibt nur die Datenbank um — keine neuen Uploads nötig.';
+  body.appendChild(info);
+
+  // Shift controls
+  const shiftWrap=document.createElement('div');
+  shiftWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap';
+  const shiftLabel=document.createElement('span');
+  shiftLabel.style.cssText='font-size:12px;color:var(--text2)';
+  shiftLabel.textContent='Alle PDFs verschieben um:';
+  shiftWrap.appendChild(shiftLabel);
+  [-2,-1,1,2].forEach(n=>{
+    const btn=document.createElement('button');
+    btn.className='btn btn-g btn-sm';
+    btn.textContent=(n>0?'+':'')+n;
+    btn.onclick=()=>{shiftAllPdfs(n);renderReassign(songMap);};
+    shiftWrap.appendChild(btn);
+  });
+  const resetBtn=document.createElement('button');
+  resetBtn.className='btn btn-sm';resetBtn.textContent='↺ Reset';
+  resetBtn.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
+  resetBtn.onclick=()=>{_reassignData.forEach(r=>r.assignedTo=r.song.id);renderReassign(songMap);};
+  shiftWrap.appendChild(resetBtn);
+  body.appendChild(shiftWrap);
+
+  // Build lookup: assignedTo→file for display
+  const assignMap=new Map(_reassignData.map(r=>[r.song.id,r]));
+
+  // Table
+  const table=document.createElement('div');
+  table.style.cssText='background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden';
+
+  // Header
+  const hdr=document.createElement('div');
+  hdr.style.cssText='display:grid;grid-template-columns:30px 1fr 1fr 60px;gap:0;padding:6px 10px;background:var(--hover);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em';
+  hdr.innerHTML='<div>#</div><div>Lied (bleibt)</div><div>Zugeordnete PDF</div><div></div>';
+  table.appendChild(hdr);
+
+  _reassignData.forEach((row,idx)=>{
+    const tr=document.createElement('div');
+    const changed=row.assignedTo!==row.song.id;
+    tr.style.cssText='display:grid;grid-template-columns:30px 1fr 1fr 60px;gap:0;padding:7px 10px;border-top:0.5px solid var(--border);align-items:center;background:'+(changed?'rgba(91,141,238,.07)':'');
+
+    // Index
+    const tdIdx=document.createElement('div');
+    tdIdx.style.cssText='font-size:11px;color:var(--text3)';
+    tdIdx.textContent=row.song.quelle_nr||'–';
+    tr.appendChild(tdIdx);
+
+    // Song name
+    const tdSong=document.createElement('div');
+    tdSong.style.cssText='font-size:12px;padding-right:8px';
+    tdSong.textContent=row.song.liedanfang||row.song.title||'–';
+    tr.appendChild(tdSong);
+
+    // Assigned PDF (which song's file is currently mapped here)
+    const assignedRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+    const tdPdf=document.createElement('div');
+    tdPdf.style.cssText='font-size:12px;color:'+(changed?'#8fb3f5':'var(--text2)')+';padding-right:8px;display:flex;align-items:center;gap:6px';
+    const pdfSong=assignedRow?assignedRow.song:null;
+    tdPdf.innerHTML=(changed?'<span style="color:#8fb3f5">⚠</span>':'')
+      +(pdfSong?(pdfSong.quelle_nr?'<span style="color:var(--accent2);min-width:18px">'+pdfSong.quelle_nr+'</span> ':'')+esc(pdfSong.liedanfang||pdfSong.title||'–'):'<span style="color:var(--text3)">keine PDF</span>');
+    tr.appendChild(tdPdf);
+
+    // Move buttons
+    const tdBtns=document.createElement('div');
+    tdBtns.style.cssText='display:flex;gap:3px;justify-content:flex-end';
+    const upBtn=document.createElement('button');upBtn.className='btn btn-sm btn-g';upBtn.textContent='↑';upBtn.style.padding='2px 7px';
+    const dnBtn=document.createElement('button');dnBtn.className='btn btn-sm btn-g';dnBtn.textContent='↓';dnBtn.style.padding='2px 7px';
+    upBtn.onclick=()=>{swapPdfs(idx,idx-1);renderReassign(songMap);};
+    dnBtn.onclick=()=>{swapPdfs(idx,idx+1);renderReassign(songMap);};
+    if(idx===0)upBtn.disabled=true;
+    if(idx===_reassignData.length-1)dnBtn.disabled=true;
+    tdBtns.appendChild(upBtn);tdBtns.appendChild(dnBtn);
+    tr.appendChild(tdBtns);
+
+    table.appendChild(tr);
+  });
+  body.appendChild(table);
+
+  // Changed count
+  const changed=_reassignData.filter(r=>r.assignedTo!==r.song.id).length;
+  if(changed){
+    const note=document.createElement('div');
+    note.style.cssText='font-size:12px;color:#8fb3f5;margin-top:8px';
+    note.textContent=changed+' Zuordnung(en) geändert (blau markiert)';
+    body.appendChild(note);
+  }
+
+  footer.innerHTML='';
+  const cancelBtn=document.createElement('button');cancelBtn.className='btn btn-g';cancelBtn.style.flex='1';cancelBtn.textContent='Abbrechen';
+  cancelBtn.onclick=()=>closeModal('m-pdf-reassign');
+  const saveBtn=document.createElement('button');saveBtn.className='btn btn-p';saveBtn.style.flex='2';
+  saveBtn.textContent='💾 Zuordnungen speichern ('+changed+' Änderungen)';
+  saveBtn.disabled=changed===0;
+  saveBtn.onclick=()=>savePdfReassign();
+  footer.appendChild(cancelBtn);footer.appendChild(saveBtn);
+}
+
+function shiftAllPdfs(n){
+  // Shift which file is assigned to each song by n positions
+  const ids=_reassignData.map(r=>r.song.id);
+  const assignments=_reassignData.map(r=>r.assignedTo);
+  const len=ids.length;
+  _reassignData.forEach((r,i)=>{
+    const newIdx=((i-n)%len+len)%len;
+    r.assignedTo=assignments[newIdx];
+  });
+}
+
+function swapPdfs(a,b){
+  if(b<0||b>=_reassignData.length)return;
+  const tmp=_reassignData[a].assignedTo;
+  _reassignData[a].assignedTo=_reassignData[b].assignedTo;
+  _reassignData[b].assignedTo=tmp;
+}
+
+async function savePdfReassign(){
+  const footer=document.getElementById('pdf-reassign-footer');
+  const saveBtn=footer.querySelector('.btn-p');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Speichere…';}
+
+  const toUpdate=_reassignData.filter(r=>r.assignedTo!==r.song.id);
+  let ok=0,errs=0;
+
+  for(const row of toUpdate){
+    // The file that should belong to this song is currently assigned to row.assignedTo
+    const sourceRow=_reassignData.find(r=>r.song.id===row.assignedTo);
+    if(!sourceRow?.file)continue;
+    const f=sourceRow.file;
+    // Update song_files: change song_id to row.song.id, update path
+    const newPath=row.song.id+'/chorsatz.pdf';
+    // Copy in storage
+    const{data:dl}=await SB.storage.from('choir-media').download(f.path);
+    if(!dl){errs++;continue;}
+    await SB.storage.from('choir-media').upload(newPath,dl,{upsert:true});
+    const{data:{publicUrl}}=SB.storage.from('choir-media').getPublicUrl(newPath);
+    await SB.from('song_files').update({song_id:row.song.id,path:newPath,url:publicUrl}).eq('id',f.id);
+    ok++;
+  }
+
+  T('✓ '+ok+' PDF-Zuordnungen korrigiert'+(errs?' ('+errs+' Fehler)':''),'ok');
+  await loadSongs();
+  closeModal('m-pdf-reassign');
 }
 
 // ========== INIT ==========

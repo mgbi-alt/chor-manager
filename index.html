@@ -4936,20 +4936,20 @@ function renderReassign(songMap){
     renderList();
     loadPreview(selectedIdx);
 
-    function buildFooter(badCount,okCount){
+    function buildFooter(badCount,okCount,pending){
       footer.innerHTML='';
+      const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
+      const parts=[];
+      if(okCount)parts.push(okCount+' ✓');
+      if(badCount)parts.push(badCount+' ✗');
+      if(pending)parts.push(pending+' offen');
+      info.textContent=parts.join(' · ');
+      footer.appendChild(info);
       if(badCount>0){
-        const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
-        info.textContent=okCount+' ✓ korrekt · '+badCount+' ✗ falsch → Galerie zur Korrektur';
-        footer.appendChild(info);
         const gallBtn=document.createElement('button');gallBtn.className='btn btn-p';gallBtn.style.flex='2';
-        gallBtn.textContent='🖼 Falsche PDFs korrigieren ('+badCount+')';
+        gallBtn.textContent='🖼 Richtige PDFs auswählen ('+badCount+')';
         gallBtn.onclick=()=>{phase='gallery';buildUI();};
         footer.appendChild(gallBtn);
-      } else {
-        const info=document.createElement('div');info.style.cssText='font-size:11px;color:var(--success);flex:1;align-self:center';
-        info.textContent='Alle '+okCount+' PDFs als korrekt markiert!';
-        footer.appendChild(info);
       }
       const saveBtn=document.createElement('button');saveBtn.className='btn btn-g';saveBtn.style.flex='1';
       saveBtn.textContent='💾 Speichern';saveBtn.onclick=()=>savePdfReassign();
@@ -4958,12 +4958,16 @@ function renderReassign(songMap){
 
     const initBad=_reassignData.filter(r=>r.status==='bad').length;
     const initOk=_reassignData.filter(r=>r.status==='ok').length;
-    if(initBad>0||initOk===_reassignData.length)buildFooter(initBad,initOk);
-    else{
-      footer.innerHTML='';
-      const hint=document.createElement('div');hint.style.cssText='font-size:11px;color:var(--text2);flex:1;align-self:center';
-      hint.textContent='Alle Lieder prüfen und markieren';footer.appendChild(hint);
+    function refreshFooter(){
+      const badCount=_reassignData.filter(r=>r.status==='bad').length;
+      const okCount=_reassignData.filter(r=>r.status==='ok').length;
+      const pending=_reassignData.filter(r=>r.status==='pending').length;
+      buildFooter(badCount,okCount,pending);
     }
+    // Patch advanceToNext to also refresh footer
+    const _origAdvance=advanceToNext;
+    advanceToNext=(idx)=>{_origAdvance(idx);refreshFooter();};
+    refreshFooter();
   }
 
   // ===== PHASE 2: GALLERY =====
@@ -5031,7 +5035,7 @@ function renderReassign(songMap){
         if(!fileUrl)continue;
 
         const card=document.createElement('div');
-        card.style.cssText='border:1.5px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s;width:130px;flex-shrink:0';
+        card.style.cssText='border:1.5px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s;width:240px;flex-shrink:0';
         card.title='Nr. '+(row.song.quelle_nr||'?')+' · '+esc(row.song.liedanfang||'');
 
         const label=document.createElement('div');
@@ -5039,7 +5043,7 @@ function renderReassign(songMap){
         label.textContent=(row.song.quelle_nr?'Nr.'+row.song.quelle_nr+' ':'')+esc(row.song.liedanfang||row.song.title||'–').substring(0,20);
 
         const canvasWrap=document.createElement('div');
-        canvasWrap.style.cssText='background:#fff;height:90px;overflow:hidden;display:flex;align-items:flex-start';
+        canvasWrap.style.cssText='background:#fff;height:160px;overflow:hidden;display:flex;align-items:flex-start';
         const loadingEl=document.createElement('div');
         loadingEl.style.cssText='font-size:10px;color:#999;padding:6px;width:100%';loadingEl.textContent='…';
         canvasWrap.appendChild(loadingEl);
@@ -5070,9 +5074,9 @@ function renderReassign(songMap){
             const pdf=await pdfjsLib.getDocument({data:buf}).promise;
             const page=await pdf.getPage(1);
             const naturalVp=page.getViewport({scale:1});
-            const scale=130/naturalVp.width;
+            const scale=240/naturalVp.width;
             const fullVp=page.getViewport({scale});
-            const cropH=Math.round(fullVp.height*0.14);
+            const cropH=Math.round(fullVp.height*0.18);
             const canvas=document.createElement('canvas');canvas.width=fullVp.width;canvas.height=cropH;
             canvas.style.cssText='width:100%;display:block';
             canvasWrap.replaceChild(canvas,loadingEl);

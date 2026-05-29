@@ -3755,9 +3755,17 @@ async function importDbPdf(evt){
         }
       } else {
         inserted+=batch.length;
-        (newRows||[]).forEach((r,j)=>{
-          const orig=toInsert[i+j];
-          insertedIds.push({id:r.id,seite_von:orig._seite_von,seite_bis:orig._seite_bis});
+        // Match returned rows by liedanfang, NOT by index (Supabase doesn't guarantee order)
+        const batchMap=new Map();
+        toInsert.slice(i,i+50).forEach(s=>{
+          const key=(s.liedanfang||s.title||'').toLowerCase().trim();
+          batchMap.set(key,{seite_von:s._seite_von,seite_bis:s._seite_bis});
+        });
+        (newRows||[]).forEach(r=>{
+          const key=(r.liedanfang||'').toLowerCase().trim();
+          const orig=batchMap.get(key);
+          if(orig)insertedIds.push({id:r.id,seite_von:orig.seite_von,seite_bis:orig.seite_bis});
+          else insertedIds.push({id:r.id,seite_von:null,seite_bis:null});
         });
       }
       setProgress(45+Math.round(inserted/toInsert.length*25),'Gespeichert: '+inserted+'/'+toInsert.length+'...');

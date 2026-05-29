@@ -455,6 +455,13 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="mf" id="merge-footer"></div>
 </div></div>
 
+<!-- Quelle Browser -->
+<div class="mo" id="m-quelle-browser"><div class="md" style="max-height:96vh">
+  <div class="mhandle"></div>
+  <div class="mh"><h3>📖 Quellenübersicht</h3><button class="mclose" onclick="closeModal('m-quelle-browser')">×</button></div>
+  <div class="mb" id="quelle-browser-body" style="padding:14px"></div>
+</div></div>
+
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
@@ -3925,6 +3932,7 @@ async function renderSettings(tab='members'){
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Themen & Anlässe vereinheitlichen: Zusammenführt doppelte Labels, normalisiert Schreibweisen und überführt alle Anlass-Werte in das Thema-Feld.</div>
         <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
       <div class="card" style="cursor:default">
@@ -4364,6 +4372,174 @@ async function executeMerge(group,merged){
   T(`✓ ${group.length} Einträge zusammengeführt`,'ok');
   mergeIdx++;
   showMergeGroup();
+}
+
+
+// ========== QUELLE BROWSER ==========
+async function openQuelleBrowser(){
+  const body=document.getElementById('quelle-browser-body');
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
+  openModal('m-quelle-browser');
+
+  const{data:songs}=await SB.from('songs').select('id,liedanfang,title,quelle,quelle_nr,in_repertoire,komponist');
+  if(!songs){body.innerHTML='<p style="color:var(--err)">Fehler beim Laden.</p>';return;}
+
+  // Group by normalized quelle
+  const quellen=new Map();
+  songs.forEach(s=>{
+    if(!s.quelle)return;
+    const q=s.quelle.trim();
+    if(!quellen.has(q))quellen.set(q,[]);
+    quellen.get(q).push(s);
+  });
+
+  if(!quellen.size){body.innerHTML='<p style="color:var(--text2)">Keine Quellenangaben gefunden.</p>';return;}
+
+  body.innerHTML='';
+
+  // Quelle selector
+  const selWrap=document.createElement('div');
+  selWrap.style.cssText='margin-bottom:14px';
+  const selLabel=document.createElement('div');
+  selLabel.style.cssText='font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px';
+  selLabel.textContent='Quelle auswählen';
+  selWrap.appendChild(selLabel);
+  const sel=document.createElement('select');
+  sel.className='fi';
+  sel.style.cssText='width:100%';
+  [...quellen.keys()].sort().forEach(q=>{
+    const opt=document.createElement('option');
+    opt.value=q;opt.textContent=q+' ('+quellen.get(q).length+' Lieder)';
+    sel.appendChild(opt);
+  });
+  selWrap.appendChild(sel);
+  body.appendChild(selWrap);
+
+  // Max number input
+  const maxWrap=document.createElement('div');
+  maxWrap.style.cssText='display:flex;gap:8px;align-items:flex-end;margin-bottom:14px';
+  const maxLabel=document.createElement('div');
+  maxLabel.style.cssText='font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px';
+  maxLabel.textContent='Letzter bekannter Eintrag (Nr.)';
+  const maxInpWrap=document.createElement('div');maxInpWrap.style.flex='1';
+  maxInpWrap.appendChild(maxLabel);
+  const maxInp=document.createElement('input');
+  maxInp.className='fi';maxInp.type='number';maxInp.placeholder='z.B. 300';maxInp.style.width='100%';
+  maxInpWrap.appendChild(maxInp);
+  maxWrap.appendChild(maxInpWrap);
+  const showBtn=document.createElement('button');
+  showBtn.className='btn btn-p';showBtn.textContent='Anzeigen';showBtn.style.cssText='flex:0 0 auto;padding:0 18px';
+  maxWrap.appendChild(showBtn);
+  body.appendChild(maxWrap);
+
+  const resultArea=document.createElement('div');
+  body.appendChild(resultArea);
+
+  function renderQuelle(){
+    const q=sel.value;
+    const maxNr=parseInt(maxInp.value)||0;
+    const list=quellen.get(q)||[];
+
+    // Build nr→song map
+    const nrMap=new Map();
+    list.forEach(s=>{
+      const nr=parseInt(s.quelle_nr);
+      if(!isNaN(nr))nrMap.set(nr,s);
+    });
+    const withNr=[...nrMap.keys()].sort((a,b)=>a-b);
+    const noNr=list.filter(s=>!s.quelle_nr||isNaN(parseInt(s.quelle_nr)));
+
+    // Find missing numbers
+    const maxFound=withNr.length?withNr[withNr.length-1]:0;
+    const rangeEnd=Math.max(maxFound,maxNr);
+    const missing=[];
+    for(let i=1;i<=rangeEnd;i++){if(!nrMap.has(i))missing.push(i);}
+
+    resultArea.innerHTML='';
+
+    // Stats bar
+    const stats=document.createElement('div');
+    stats.style.cssText='display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+    [{label:'Vorhanden',val:withNr.length,color:'var(--success)'},{label:'Ohne Nr.',val:noNr.length,color:'var(--text2)'},{label:'Fehlend',val:missing.length,color:'#e87070'}].forEach(({label,val,color})=>{
+      const chip=document.createElement('div');
+      chip.style.cssText='background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:6px 12px;font-size:12px';
+      chip.innerHTML='<span style="color:'+color+';font-weight:600;font-size:16px">'+val+'</span><span style="color:var(--text3);margin-left:5px">'+label+'</span>';
+      stats.appendChild(chip);
+    });
+    resultArea.appendChild(stats);
+
+    // Missing numbers block
+    if(missing.length){
+      const missTitle=document.createElement('div');
+      missTitle.style.cssText='font-size:11px;color:#e87070;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px';
+      missTitle.textContent='Fehlende Nummern';
+      resultArea.appendChild(missTitle);
+      const missBox=document.createElement('div');
+      missBox.style.cssText='background:rgba(232,112,112,.06);border:0.5px solid rgba(232,112,112,.2);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px';
+      // Group consecutive into ranges
+      const ranges=[];let start=missing[0],prev=missing[0];
+      for(let i=1;i<=missing.length;i++){
+        if(i<missing.length&&missing[i]===prev+1){prev=missing[i];}
+        else{ranges.push(start===prev?String(start):start+'–'+prev);start=missing[i];prev=missing[i];}
+      }
+      ranges.forEach(r=>{
+        const chip=document.createElement('span');
+        chip.style.cssText='background:rgba(232,112,112,.12);border:0.5px solid rgba(232,112,112,.3);border-radius:4px;padding:2px 7px;font-size:11px;color:#e87070';
+        chip.textContent=r;missBox.appendChild(chip);
+      });
+      resultArea.appendChild(missBox);
+    }
+
+    // Song list
+    const listTitle=document.createElement('div');
+    listTitle.style.cssText='font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px';
+    listTitle.textContent='Lieder ('+list.length+')';
+    resultArea.appendChild(listTitle);
+
+    const table=document.createElement('div');
+    table.style.cssText='background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden';
+
+    [...withNr,...noNr.map(s=>({_noNr:true,...s}))].forEach((item,idx)=>{
+      const nr=item._noNr?null:withNr.indexOf(parseInt(item.quelle_nr||item))>=0?parseInt(item.quelle_nr||item):null;
+      const s=item._noNr?item:nrMap.get(withNr[idx])||item;
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:0.5px solid var(--border);cursor:pointer';
+      row.onmouseenter=()=>row.style.background='var(--hover)';
+      row.onmouseleave=()=>row.style.background='';
+
+      const nrCell=document.createElement('div');
+      nrCell.style.cssText='min-width:36px;font-size:12px;font-weight:600;color:var(--accent2);text-align:right';
+      nrCell.textContent=s.quelle_nr||'–';
+
+      const nameCell=document.createElement('div');
+      nameCell.style.cssText='flex:1;font-size:12px';
+      nameCell.textContent=s.liedanfang||s.title||'–';
+
+      const repBadge=document.createElement('span');
+      repBadge.className='badge '+(s.in_repertoire?'green':'gray');
+      repBadge.style.fontSize='9px';
+      repBadge.textContent=s.in_repertoire?'Repertoire':'DB';
+
+      row.appendChild(nrCell);row.appendChild(nameCell);row.appendChild(repBadge);
+      row.onclick=()=>{closeModal('m-quelle-browser');openSongDetail(s.id);};
+      table.appendChild(row);
+    });
+    resultArea.appendChild(table);
+
+    // Ohne Nummer
+    if(noNr.length){
+      const noNrTitle=document.createElement('div');
+      noNrTitle.style.cssText='font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px';
+      noNrTitle.textContent='Ohne Nummer ('+noNr.length+')';
+      resultArea.appendChild(noNrTitle);
+    }
+  }
+
+  showBtn.onclick=renderQuelle;
+  sel.onchange=renderQuelle;
+  // Auto-render if Chorbuch is available
+  const chorbuch=[...quellen.keys()].find(q=>q.toLowerCase().includes('chorbuch'));
+  if(chorbuch){sel.value=chorbuch;renderQuelle();}
 }
 
 // ========== INIT ==========

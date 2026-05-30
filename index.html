@@ -4731,53 +4731,81 @@ async function openPdfReassign(){
   footer.innerHTML='';
   openModal('m-pdf-reassign');
 
-  // Load all songs with chorsatz files
+  // Load ALL songs and ALL chorsatz files
   const{data:files}=await SB.from('song_files').select('id,song_id,url,path,file_type').eq('file_type','chorsatz');
   const{data:songs}=await SB.from('songs').select('id,liedanfang,title,quelle_nr,quelle').order('quelle_nr',{ascending:true,nullsFirst:false});
   if(!files||!songs){body.innerHTML='<p style="color:var(--err)">Fehler beim Laden.</p>';return;}
 
-  // Build map song_id→song
   const songMap=new Map(songs.map(s=>[s.id,s]));
-  // Build map song_id→file
   const fileMap=new Map(files.map(f=>[f.song_id,f]));
 
-  // Only songs that have a chorsatz file
-  const withFile=songs.filter(s=>fileMap.has(s.id));
+  // Get unique sources
+  const quellen=[...new Set(songs.map(s=>s.quelle).filter(Boolean))].sort();
 
-  // Restore from localStorage if available
+  // Restore saved state
   const STORAGE_KEY='pdf_reassign_state_v1';
   let savedState=null;
   try{const raw=localStorage.getItem(STORAGE_KEY);if(raw)savedState=JSON.parse(raw);}catch(e){}
 
-  _reassignData=withFile.map(s=>{
-    const saved=savedState?.find(x=>x.songId===s.id);
-    return{
-      song:s,
-      file:fileMap.get(s.id),
-      assignedTo:saved?.assignedTo||s.id,
-      status:saved?.status||'pending',
-    };
-  });
+  // Show source picker
+  body.innerHTML='';
+  const wrap=document.createElement('div');
+  wrap.style.cssText='padding:20px;max-width:480px;margin:0 auto';
 
-  // Show restore banner if saved state found
+  const title=document.createElement('div');
+  title.style.cssText='font-size:13px;color:var(--text2);margin-bottom:16px';
+  title.textContent='Welche Quelle möchtest du prüfen?';
+  wrap.appendChild(title);
+
+  // Saved state banner
   if(savedState&&savedState.length){
-    const reviewed=_reassignData.filter(r=>r.status!=='pending').length;
+    const reviewed=savedState.filter(x=>x.status!=='pending').length;
     if(reviewed>0){
-      body.innerHTML=`<div style="padding:12px 14px;background:rgba(91,141,238,.1);border-bottom:0.5px solid rgba(91,141,238,.3);font-size:12px;color:var(--text2)">
-        💾 Gespeicherter Stand geladen: ${reviewed} von ${_reassignData.length} Lieder bereits markiert.
-        <button class="btn btn-sm btn-g" style="margin-left:10px" onclick="
-          try{localStorage.removeItem('${STORAGE_KEY}');}catch(e){}
-          _reassignData.forEach(r=>{r.assignedTo=r.song.id;r.status='pending';});
-          renderReassign(songMap);
-        ">↺ Neu starten</button>
-      </div>`;
-      // Brief delay so banner is visible
-      setTimeout(()=>renderReassign(songMap),1200);
-      return;
+      const banner=document.createElement('div');
+      banner.style.cssText='padding:10px 12px;background:rgba(91,141,238,.1);border:0.5px solid rgba(91,141,238,.3);border-radius:var(--r);font-size:12px;color:var(--text2);margin-bottom:14px;display:flex;align-items:center;gap:8px';
+      banner.innerHTML='💾 Gespeicherter Stand: '+reviewed+' Lieder markiert.';
+      const rst=document.createElement('button');rst.className='btn btn-sm btn-g';rst.textContent='↺ Löschen';
+      rst.onclick=()=>{try{localStorage.removeItem(STORAGE_KEY);}catch(e){}savedState=null;banner.remove();};
+      banner.appendChild(rst);
+      wrap.appendChild(banner);
     }
   }
 
-  renderReassign(songMap);
+  const sel=document.createElement('select');
+  sel.className='fi';sel.style.cssText='width:100%;margin-bottom:12px';
+  quellen.forEach(q=>{
+    const opt=document.createElement('option');opt.value=q;
+    // Count songs with/without PDF for this source
+    const total=songs.filter(s=>s.quelle===q).length;
+    const withPdf=songs.filter(s=>s.quelle===q&&fileMap.has(s.id)).length;
+    opt.textContent=q+' ('+withPdf+'/'+total+' mit PDF)';
+    sel.appendChild(opt);
+  });
+  // Auto-select Chorbuch if present
+  const chorbuch=quellen.find(q=>q.toLowerCase().includes('chorbuch'));
+  if(chorbuch)sel.value=chorbuch;
+  wrap.appendChild(sel);
+
+  const startBtn=document.createElement('button');
+  startBtn.className='btn btn-p';startBtn.style.width='100%';
+  startBtn.textContent='Prüfen starten';
+  startBtn.onclick=()=>{
+    const q=sel.value;
+    // Include ALL songs from this source (with and without PDF)
+    const filtered=songs.filter(s=>s.quelle===q);
+    _reassignData=filtered.map(s=>{
+      const saved=savedState?.find(x=>x.songId===s.id);
+      return{
+        song:s,
+        file:fileMap.get(s.id)||null,
+        assignedTo:saved?.assignedTo||s.id,
+        status:saved?.status||'pending',
+      };
+    });
+    renderReassign(songMap,fileMap);
+  };
+  wrap.appendChild(startBtn);
+  body.appendChild(wrap);
 }
 
 const _REASSIGN_KEY='pdf_reassign_state_v1';
@@ -4789,7 +4817,7 @@ function saveReassignState(){
   }catch(e){}
 }
 
-function renderReassign(songMap){
+function renderReassign(songMap,fileMap){
   const body=document.getElementById('pdf-reassign-body');
   const footer=document.getElementById('pdf-reassign-footer');
   const md=document.querySelector('#m-pdf-reassign .md');

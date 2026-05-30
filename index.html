@@ -4792,7 +4792,7 @@ async function openPdfReassign(){
   startBtn.onclick=()=>{
     const q=sel.value;
     // Include ALL songs from this source (with and without PDF)
-    const filtered=songs.filter(s=>s.quelle===q);
+    const filtered=songs.filter(s=>s.quelle===q).sort((a,b)=>(parseInt(a.quelle_nr)||99999)-(parseInt(b.quelle_nr)||99999));
     _reassignData=filtered.map(s=>{
       const saved=savedState?.find(x=>x.songId===s.id);
       return{

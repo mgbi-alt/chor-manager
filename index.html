@@ -1551,7 +1551,7 @@ async function setAtt(evId,mId,val){
 }
 async function openEventForm(id=null){
   editEvId=id;
-  const{data:songs}=await SB.from('songs').select('id,title,liedanfang').eq('in_repertoire',true).order('liedanfang',{nullsFirst:false}).order('title');
+  const{data:songs}=await SB.from('songs').select('id,title,liedanfang,besetzung').eq('in_repertoire',true).order('liedanfang',{nullsFirst:false}).order('title');
   const{data:members}=await SB.from('profiles').select('id,name').order('name');
   let e={};
   if(id){const{data}=await SB.from('events').select('*,event_program(*),event_tasks(*)').eq('id',id).single();e=data||{};}

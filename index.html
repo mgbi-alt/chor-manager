@@ -477,6 +477,13 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div class="mf" id="pdf-reassign-footer"></div>
 </div></div>
 
+<!-- Activity Log -->
+<div class="mo" id="m-activity-log"><div class="md" style="max-height:96vh">
+  <div class="mhandle"></div>
+  <div class="mh"><h3>📋 Aktivitätsprotokoll</h3><button class="mclose" onclick="closeModal('m-activity-log')">×</button></div>
+  <div class="mb" id="activity-log-body" style="padding:14px"></div>
+</div></div>
+
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
@@ -1214,21 +1221,38 @@ async function saveSong(){
   if(editSongId){({error}=await SB.from('songs').update(payload).eq('id',editSongId));}
   else{({error}=await SB.from('songs').insert({...payload,in_repertoire:true,created_by:currentUser.id}));}
   if(error){T('Fehler: '+error.message,'err');return;}
+  // Log activity
+  if(editSongId){
+    const before=cachedSongs.find(s=>s.id===editSongId)||{};
+    const changes=diffObjects(before,payload,['title','liedanfang','besetzung','thema','komponist','textdichter','arrangeur','uebersetzer','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','schrank','notizen']);
+    await logActivity('update','song',editSongId,payload.liedanfang||payload.title,changes);
+  } else {
+    await logActivity('create','song','new',payload.liedanfang||payload.title);
+  }
   closeModal('m-song-form');renderSongs();T(editSongId?'Lied aktualisiert':'Lied hinzugefügt','ok');
 }
-async function delSong(id){await SB.from('songs').delete().eq('id',id);closeModal('m-song-detail');renderSongs();T('Lied gelöscht');}
+async function delSong(id){
+  const s=cachedSongs.find(x=>x.id===id);
+  await SB.from('songs').delete().eq('id',id);
+  await logActivity('delete','song',id,s?.liedanfang||s?.title||id);
+  closeModal('m-song-detail');renderSongs();T('Lied gelöscht');
+}
 async function removeFromRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:false}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}
   const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=false;
   closeModal('m-song-detail');
   displaySongs(filteredSongs());updateFilterCount();
+  const sr=cachedSongs.find(x=>x.id===id);
+  await logActivity('update','song',id,(sr?.liedanfang||sr?.title||id),{in_repertoire:{von:true,nach:false}});
   T('✓ Aus Repertoire entfernt','ok');
 }
 async function addToRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:true}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}
   const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=true;
+  const sa=cachedSongs.find(x=>x.id===id);
+  await logActivity('update','song',id,(sa?.liedanfang||sa?.title||id),{in_repertoire:{von:false,nach:true}});
   T('✅ Ins Repertoire aufgenommen','ok');
   closeModal('m-song-detail');
   displaySongs(filteredSongs());updateSourceBtn();
@@ -1764,9 +1788,21 @@ async function saveEvent(){
   const taskInsert=pEls.map((el,i)=>({event_id:evId,person:el.value.trim(),aufgabe:tEls[i]?.value.trim()||''})).filter(t=>t.person&&t.aufgabe);
   if(taskInsert.length)await SB.from('event_tasks').insert(taskInsert);
   if((window._efMembers||[]).length&&!editEvId)await SB.from('attendance').upsert((window._efMembers).map(m=>({event_id:evId,member_id:m.id,status:''})),{onConflict:'event_id,member_id',ignoreDuplicates:true});
+  if(editEvId){
+    const evBefore=cachedEvents?.find?.(e=>e.id===editEvId)||{};
+    const evChanges=diffObjects(evBefore,payload,['title','datum','uhrzeit','ort','dirigent','chor','thema','notizen','status','verschoben_auf']);
+    await logActivity('update','event',editEvId,payload.title,evChanges);
+  } else {
+    await logActivity('create','event',evId||'new',payload.title);
+  }
   closeModal('m-ev-form');renderEvents();T(editEvId?'Veranstaltung aktualisiert':'Veranstaltung hinzugefügt','ok');
 }
-async function delEvent(id){await SB.from('events').delete().eq('id',id);closeModal('m-ev-detail');renderEvents();T('Veranstaltung gelöscht');}
+async function delEvent(id){
+  const ev=cachedEvents?.find?.(e=>e.id===id);
+  await SB.from('events').delete().eq('id',id);
+  await logActivity('delete','event',id,ev?.title||id);
+  closeModal('m-ev-detail');renderEvents();T('Veranstaltung gelöscht');
+}
 
 // ========== AUTOCOMPLETE ==========
 let personLzMap={}; // name -> lebensdaten
@@ -4026,6 +4062,7 @@ async function renderSettings(tab='members'){
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openBackup()">💾 Backup erstellen</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openActivityLog()">📋 Aktivitätsprotokoll</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openPdfReassign()">🔧 PDF-Zuordnung korrigieren</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
@@ -5249,6 +5286,126 @@ async function savePdfReassign(){
   try{localStorage.removeItem(_REASSIGN_KEY);}catch(e){}
   await loadSongs();
   closeModal('m-pdf-reassign');
+}
+
+
+// ========== ACTIVITY LOG ==========
+async function logActivity(action, entity, entityId, entityTitle, changes=null){
+  try{
+    await SB.from('activity_log').insert({
+      user_id: currentUser?.id||null,
+      user_name: currentProfile?.name||currentUser?.email||'Unbekannt',
+      action,        // 'create' | 'update' | 'delete'
+      entity,        // 'song' | 'event' | 'calendar_event' etc.
+      entity_id: String(entityId||''),
+      entity_title: entityTitle||'',
+      changes: changes?JSON.stringify(changes):null,
+    });
+  }catch(e){console.warn('Log failed:',e);}
+}
+
+function diffObjects(before, after, fields){
+  const changes={};
+  for(const f of fields){
+    const v1=String(before[f]??'');
+    const v2=String(after[f]??'');
+    if(v1!==v2)changes[f]={von:before[f]??null,nach:after[f]??null};
+  }
+  return Object.keys(changes).length?changes:null;
+}
+
+
+// ========== ACTIVITY LOG VIEW ==========
+async function openActivityLog(){
+  const body=document.getElementById('activity-log-body');
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade…</p>';
+  openModal('m-activity-log');
+
+  const{data:logs}=await SB.from('activity_log').select('*').order('created_at',{ascending:false}).limit(200);
+  if(!logs||!logs.length){body.innerHTML='<p style="color:var(--text2)">Noch keine Einträge.</p>';return;}
+
+  const actionLabel={create:'➕ Erstellt',update:'✏️ Geändert',delete:'🗑 Gelöscht'};
+  const entityLabel={song:'Lied',event:'Veranstaltung',calendar_event:'Termin',member:'Mitglied'};
+  const actionColor={create:'var(--success)',update:'#8fb3f5',delete:'#e87070'};
+
+  // Filter controls
+  const filterBar=document.createElement('div');
+  filterBar.style.cssText='display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center';
+
+  const filterEntity=document.createElement('select');
+  filterEntity.className='fi';filterEntity.style.cssText='flex:1;min-width:120px';
+  [['','Alle Typen'],['song','Lieder'],['event','Veranstaltungen']].forEach(([v,l])=>{
+    const o=document.createElement('option');o.value=v;o.textContent=l;filterEntity.appendChild(o);
+  });
+
+  const filterAction=document.createElement('select');
+  filterAction.className='fi';filterAction.style.cssText='flex:1;min-width:120px';
+  [['','Alle Aktionen'],['create','Erstellt'],['update','Geändert'],['delete','Gelöscht']].forEach(([v,l])=>{
+    const o=document.createElement('option');o.value=v;o.textContent=l;filterAction.appendChild(o);
+  });
+
+  filterBar.appendChild(filterEntity);filterBar.appendChild(filterAction);
+  body.innerHTML='';body.appendChild(filterBar);
+
+  const listEl=document.createElement('div');
+  body.appendChild(listEl);
+
+  function renderLog(){
+    const fe=filterEntity.value;
+    const fa=filterAction.value;
+    const filtered=logs.filter(l=>(!fe||l.entity===fe)&&(!fa||l.action===fa));
+
+    listEl.innerHTML='';
+    if(!filtered.length){listEl.innerHTML='<p style="color:var(--text2);font-size:12px">Keine Einträge.</p>';return;}
+
+    filtered.forEach(log=>{
+      const row=document.createElement('div');
+      row.style.cssText='padding:9px 12px;border-bottom:0.5px solid var(--border);display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start';
+
+      // Action badge
+      const badge=document.createElement('div');
+      badge.style.cssText='font-size:10px;color:'+actionColor[log.action]+';white-space:nowrap;padding-top:1px';
+      badge.textContent=actionLabel[log.action]||log.action;
+
+      // Main info
+      const info=document.createElement('div');
+      const title=document.createElement('div');
+      title.style.cssText='font-size:12px;font-weight:500';
+      title.textContent=(entityLabel[log.entity]||log.entity)+': '+(log.entity_title||log.entity_id||'–');
+      info.appendChild(title);
+
+      // Changes
+      if(log.changes){
+        try{
+          const ch=typeof log.changes==='string'?JSON.parse(log.changes):log.changes;
+          const fields=Object.keys(ch);
+          if(fields.length){
+            const chEl=document.createElement('div');
+            chEl.style.cssText='font-size:10px;color:var(--text3);margin-top:3px';
+            chEl.textContent=fields.map(f=>{
+              const v=ch[f];
+              const von=v.von!=null&&v.von!==''?String(v.von):'leer';
+              const nach=v.nach!=null&&v.nach!==''?String(v.nach):'leer';
+              return f+': '+von+' → '+nach;
+            }).join(' · ');
+            info.appendChild(chEl);
+          }
+        }catch(e){}
+      }
+
+      // Meta: user + time
+      const meta=document.createElement('div');
+      meta.style.cssText='font-size:10px;color:var(--text3);text-align:right;white-space:nowrap';
+      const d=new Date(log.created_at);
+      meta.innerHTML=esc(log.user_name||'?')+'<br>'+d.toLocaleDateString('de-DE')+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+      row.appendChild(badge);row.appendChild(info);row.appendChild(meta);
+      listEl.appendChild(row);
+    });
+  }
+
+  filterEntity.onchange=renderLog;filterAction.onchange=renderLog;
+  renderLog();
 }
 
 // ========== INIT ==========

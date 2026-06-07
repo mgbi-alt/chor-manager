@@ -291,19 +291,20 @@ textarea.fi{resize:vertical;min-height:70px;}
   <div id="content">
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
-      <div class="ph"><h2 id="d-greet">Guten Tag</h2></div>
-      <div id="d-anns"></div>
-      <div class="srow">
-        <div class="scard"><div class="snum" id="ds-songs">–</div><div class="slabel">Lieder</div></div>
-        <div class="scard"><div class="snum" id="ds-events">–</div><div class="slabel">Veranstaltungen</div></div>
+      <div class="ph" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <h2 id="d-greet" style="margin:0">Guten Tag</h2>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <div class="scard" style="padding:4px 12px;min-width:0"><div class="snum" style="font-size:18px" id="ds-songs">–</div><div class="slabel">Lieder</div></div>
+          <div class="scard" style="padding:4px 12px;min-width:0"><div class="snum" style="font-size:18px" id="ds-events">–</div><div class="slabel">Veranst.</div></div>
+        </div>
       </div>
+      <div id="d-anns"></div>
       <div class="st">Nächste Termine</div><div id="d-cal"></div>
       <div class="st">Bevorstehende Veranstaltungen</div><div id="d-events"></div>
     </div>
     <!-- MITTEILUNGEN -->
-    <div class="page" id="page-ann">
-      <div class="hrow"><h2>Mitteilungen</h2><button class="btn btn-ic" id="ann-add-btn" onclick="openAnnForm()" style="display:none">+</button></div>
-      <div id="ann-list"><div class="loading"><div class="spin"></div>Lade…</div></div>
+    <div class="page" id="page-ann" style="display:none">
+      <div id="ann-list"></div>
     </div>
     <!-- LIEDER -->
     <div class="page" id="page-songs">
@@ -390,7 +391,6 @@ textarea.fi{resize:vertical;min-height:70px;}
   <!-- NAV -->
   <div id="nav">
     <div class="ni active" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Start</div>
-    <div class="ni" onclick="showPage('ann')" id="ni-ann"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="nbadge" id="ann-badge" style="display:none">0</span>News</div>
     <div class="ni" onclick="showPage('songs')"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Lieder</div>
     <div class="ni" onclick="showPage('events')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Veranst.</div>
     <div class="ni" onclick="showPage('cal')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Kalender</div>
@@ -487,18 +487,15 @@ textarea.fi{resize:vertical;min-height:70px;}
 <!-- Announcement Form -->
 <div class="mo" id="m-ann-form"><div class="md">
   <div class="mhandle"></div>
-  <div class="mh"><h3>Mitteilung erstellen</h3><button class="mclose" onclick="closeModal('m-ann-form')">×</button></div>
-  <div class="mb">
-    <div class="fg"><label class="fl">Titel *</label><input class="fi" id="af-title"></div>
-    <div class="fg"><label class="fl">Nachricht *</label><textarea class="fi" id="af-body" style="min-height:100px"></textarea></div>
-    <div class="fr2">
-      <div class="fg"><label class="fl">Priorität</label><select class="fi" id="af-prio"><option value="normal">Normal</option><option value="high">Wichtig</option><option value="urgent">Dringend</option></select></div>
-      <div class="fg"><label class="fl">Ablaufdatum</label><input class="fi" type="date" id="af-exp"></div>
-    </div>
-  </div>
-  <div class="mf">
-    <button class="btn btn-g" onclick="closeModal('m-ann-form')" style="flex:1">Abbrechen</button>
-    <button class="btn btn-p" onclick="saveAnn()" style="flex:2">Senden</button>
+  <div class="mh"><h3>📢 Infos verwalten</h3><button class="mclose" onclick="closeModal('m-ann-form')">×</button></div>
+  <div class="mb" style="padding:14px">
+    <div class="fst">Neue Info erstellen</div>
+    <div class="fg"><label class="fl">Titel</label><input class="fi" id="af-title" placeholder="Betreff"></div>
+    <div class="fg"><label class="fl">Nachricht</label><textarea class="fi" id="af-body" rows="3" style="resize:vertical"></textarea></div>
+    <div class="fg"><label class="fl">Ablaufdatum (optional)</label><input class="fi" type="date" id="af-exp"></div>
+    <button class="btn btn-p" onclick="saveAnn()" style="width:100%;margin-top:4px">📢 Info veröffentlichen</button>
+    <div class="fst" style="margin-top:18px">Aktive Infos</div>
+    <div id="af-ann-list"><div class="loading"><div class="spin"></div>Lade…</div></div>
   </div>
 </div></div>
 
@@ -862,9 +859,11 @@ async function renderDash(){
   document.getElementById('d-greet').textContent=`${h<12?'Guten Morgen':h<18?'Guten Tag':'Guten Abend'}, ${firstName((currentProfile||{}).name)}!`;
   const[{count:sc},{count:ec}]=await Promise.all([SB.from('songs').select('*',{count:'exact',head:true}),SB.from('events').select('*',{count:'exact',head:true})]);
   document.getElementById('ds-songs').textContent=sc||0;document.getElementById('ds-events').textContent=ec||0;
-  const{data:anns}=await SB.from('announcements').select('*,announcement_reads(user_id)').order('created_at',{ascending:false}).limit(5);
+  const{data:anns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
   const unread=(anns||[]).filter(a=>!(a.announcement_reads||[]).some(r=>r.user_id===currentUser.id));
-  document.getElementById('d-anns').innerHTML=unread.length?`<div class="st">Ungelesene Mitteilungen (${unread.length})</div>`+unread.slice(0,2).map(a=>`<div class="acard ${a.priority} unread" onclick="markRead('${a.id}');showPage('ann')"><b style="font-size:14px">${esc(a.title)}</b><div style="font-size:12px;color:var(--text2);margin-top:4px">${esc(a.body.substring(0,80))}${a.body.length>80?'…':''}</div></div>`).join(''):'';
+  // Show active announcements on dashboard (not expired)
+  const{data:activeAnns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+  document.getElementById('d-anns').innerHTML=(activeAnns||[]).filter(a=>!a.expires_at||new Date(a.expires_at)>new Date()).map(a=>`<div class="ann-banner urgent"><div class="ann-title">📢 ${esc(a.title)}</div><div class="ann-body">${esc(a.body||'')}</div></div>`).join('');
   const{data:cevts}=await SB.from('calendar_events').select('*').gte('bis_datum',today()).order('datum').limit(4);
   document.getElementById('d-cal').innerHTML=(cevts||[]).length?cevts.map(e=>{
     const isMulti=e.bis_datum&&e.bis_datum!==e.datum;
@@ -921,16 +920,44 @@ async function renderAnn(){
   }).join('');loadUnread();
 }
 async function markRead(id){await SB.from('announcement_reads').upsert({announcement_id:id,user_id:currentUser.id},{onConflict:'announcement_id,user_id'});loadUnread();}
-function openAnnForm(){document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';openModal('m-ann-form');}
+function openAnnForm(){
+  document.getElementById('af-title').value='';
+  document.getElementById('af-body').value='';
+  document.getElementById('af-exp').value='';
+  openModal('m-ann-form');
+  renderAnnAdminList();
+}
+async function renderAnnAdminList(){
+  const el=document.getElementById('af-ann-list');if(!el)return;
+  const{data}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+  if(!data||!data.length){el.innerHTML='<p style="font-size:12px;color:var(--text3)">Keine aktiven Infos.</p>';return;}
+  el.innerHTML='';
+  const now=new Date();
+  data.forEach(a=>{
+    const expired=a.expires_at&&new Date(a.expires_at)<now;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:6px;opacity:'+(expired?'.5':'1');
+    const info=document.createElement('div');info.style.flex='1';
+    info.innerHTML='<div style="font-size:12px;font-weight:500">'+esc(a.title)+'</div>'
+      +'<div style="font-size:10px;color:var(--text3)">'+(expired?'⏱ Abgelaufen':'✓ Aktiv')+(a.expires_at?' · bis '+fD(a.expires_at):'')+'</div>';
+    const del=document.createElement('button');del.className='btn btn-sm';del.textContent='🗑';
+    del.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
+    del.onclick=()=>delAnn(a.id);
+    row.appendChild(info);row.appendChild(del);
+    el.appendChild(row);
+  });
+}
 async function saveAnn(){
   const title=document.getElementById('af-title').value.trim(),body=document.getElementById('af-body').value.trim();
   if(!title||!body){T('Titel und Text erforderlich','err');return;}
-  await SB.from('announcements').insert({title,body,priority:document.getElementById('af-prio').value,expires_at:document.getElementById('af-exp').value||null,created_by:currentUser.id});
-  closeModal('m-ann-form');renderAnn();T('Mitteilung gesendet','ok');
+  await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:document.getElementById('af-exp').value||null,created_by:currentUser.id});
+  document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';
+  renderAnnAdminList();
+  renderAnn();T('Info veröffentlicht','ok');
   // Send push to all
   sendPushToAll('📢 '+title,body.substring(0,100));
 }
-async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);renderAnn();}
+async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);renderAnnAdminList();renderAnn();T('Info gelöscht');}
 
 // ========== SONGS ==========
 async function renderSongs(){
@@ -4076,6 +4103,11 @@ async function renderSettings(tab='members'){
         <input type="file" id="db-pdf-reanalyze" accept=".pdf" style="display:none" onchange="reanalyzePdf(event)">
         <button class="btn btn-g" style="width:100%" onclick="document.getElementById('db-pdf-reanalyze').click()">🔄 Bestehende Daten nachkorrigieren</button>
         <div id="db-pdf-status" style="margin-top:10px;max-height:300px;overflow-y:auto"></div>
+      </div>
+      <div class="st" style="margin-top:16px">Infos & Mitteilungen</div>
+      <div class="card" style="cursor:default">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Infos auf dem Startbildschirm verwalten.</div>
+        <button class="btn btn-p" style="width:100%" onclick="openAnnForm()">📢 Infos verwalten</button>
       </div>
       <div class="st" style="margin-top:16px">Datenbank-Pflege</div>
       <div class="card" style="cursor:default">

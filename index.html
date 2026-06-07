@@ -934,18 +934,22 @@ async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announc
 
 // ========== SONGS ==========
 async function renderSongs(){
-  const[{data},{data:allFiles}]=await Promise.all([
+  const[{data},{data:allFiles},{data:perfStats}]=await Promise.all([
     SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title'),
-    SB.from('song_files').select('song_id,file_type')
+    SB.from('song_files').select('song_id,file_type'),
+    SB.from('song_performance_stats').select('song_id,last_performed,total_performances')
   ]);
   cachedSongs=data||[];
-  // Build file map: song_id -> sorted list of file_types
+  // Build file map: song_id -> list of file_types
   const FILE_ORDER=['chorsatz','klavier','orgel','instrumental','sonstiges'];
   window._songFileMap=new Map();
   (allFiles||[]).forEach(f=>{
     if(!window._songFileMap.has(f.song_id))window._songFileMap.set(f.song_id,[]);
     window._songFileMap.get(f.song_id).push(f.file_type);
   });
+  // Build performance map: song_id -> {last_performed, total_performances}
+  window._songPerfMap=new Map();
+  (perfStats||[]).forEach(p=>{if(p.last_performed)window._songPerfMap.set(p.song_id,p);});
   buildFilters();displaySongs(filteredSongs());updateSourceBtn();
 }
 function updateSourceBtn(){
@@ -1047,6 +1051,7 @@ function displaySongs(songs){
         <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}${fileBadges?` <span style="margin-left:4px">${fileBadges}</span>`:''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           ${s.besetzung?`<span class="badge">${esc(s.besetzung)}</span>`:''}
+          ${(()=>{const p=window._songPerfMap?.get(s.id);if(!p)return'<span style="font-size:9px;color:var(--text3)">Noch nie</span>';const d=new Date(p.last_performed);const months=Math.round((Date.now()-d)/2628e6);const ago=months===0?'diesen Monat':months===1?'vor 1 Monat':months<12?`vor ${months} M.`:months<24?'vor 1 Jahr':`vor ${Math.floor(months/12)} J.`;return`<span style="font-size:9px;color:var(--text3)" title="${fD(p.last_performed)} · ${p.total_performances}×">${ago}</span>`;})()}
           ${isDbOnly?`<span class="badge blue" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();addToRepertoire('${s.id}')">+ Ins Repertoire</span>`:''}
           ${allTags?`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:120px">${allTags}</div>`:''}
         </div>

@@ -949,19 +949,35 @@ async function renderAnnAdminList(){
     const del=document.createElement('button');del.className='btn btn-sm';del.textContent='🗑';
     del.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
     del.onclick=()=>delAnn(a.id);
-    row.appendChild(info);row.appendChild(del);
+    const editBtn=document.createElement('button');editBtn.className='btn btn-sm btn-g';editBtn.textContent='✏️';editBtn.style.marginRight='4px';editBtn.onclick=()=>editAnn(a,false);row.appendChild(info);row.appendChild(editBtn);row.appendChild(del);
     el.appendChild(row);
   });
 }
+let _editAnnId=null;
 async function saveAnn(inSettings=false){
   const title=document.getElementById('af-title').value.trim(),body=document.getElementById('af-body').value.trim();
   if(!title||!body){T('Titel und Text erforderlich','err');return;}
-  await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:document.getElementById('af-exp').value||null,created_by:currentUser.id});
+  const exp=document.getElementById('af-exp').value||null;
+  if(_editAnnId){
+    await SB.from('announcements').update({title,body,expires_at:exp}).eq('id',_editAnnId);
+    _editAnnId=null;
+    T('Info aktualisiert','ok');
+  } else {
+    await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:exp,created_by:currentUser.id});
+    sendPushToAll('📢 '+title,body.substring(0,100));
+    T('Info veröffentlicht','ok');
+  }
   document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';
+  const pubBtn=document.getElementById('af-pub-btn');if(pubBtn)pubBtn.textContent='📢 Info veröffentlichen';
   if(inSettings)renderSettings('infos');else renderAnnAdminList();
-  renderAnn();T('Info veröffentlicht','ok');
-  // Send push to all
-  sendPushToAll('📢 '+title,body.substring(0,100));
+  renderAnn();
+}
+function editAnn(a,inSettings=false){
+  _editAnnId=a.id;
+  const t=document.getElementById('af-title');const b=document.getElementById('af-body');const e=document.getElementById('af-exp');
+  if(t)t.value=a.title||'';if(b)b.value=a.body||'';if(e)e.value=a.expires_at?a.expires_at.substring(0,10):'';
+  const pubBtn=document.getElementById('af-pub-btn');if(pubBtn)pubBtn.textContent='💾 Änderungen speichern';
+  t?.scrollIntoView({behavior:'smooth',block:'center'});t?.focus();
 }
 async function delAnn(id,inSettings=false){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);if(inSettings)renderSettings('infos');else renderAnnAdminList();renderAnn();T('Info gelöscht');}
 
@@ -1198,6 +1214,10 @@ async function uploadSongFile(songId, fileType, inputEl){
   const{error:dbErr}=await SB.from('song_files').upsert({song_id:songId,file_type:fileType,url:publicUrl,path},{onConflict:'song_id,file_type'});
   if(dbErr){T('DB-Fehler: '+dbErr.message,'err');return;}
   input.value='';
+  // Log file upload
+  const s=cachedSongs.find(x=>x.id===songId);
+  const typeLabels={chorsatz:'Chorsatz',klavier:'Klavier',orgel:'Orgel',instrumental:'Instrumental',sonstiges:'Sonstiges'};
+  await logActivity('update','song',songId,(s?.liedanfang||s?.title||songId),{datei:{von:null,nach:typeLabels[fileType]||fileType}});
   T('✓ Datei hochgeladen','ok');
 }
 
@@ -1280,7 +1300,8 @@ async function saveSong(){
   if(editSongId){
     const before=cachedSongs.find(s=>s.id===editSongId)||{};
     const changes=diffObjects(before,payload,['title','liedanfang','besetzung','thema','komponist','textdichter','arrangeur','uebersetzer','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','schrank','notizen']);
-    await logActivity('update','song',editSongId,payload.liedanfang||payload.title,changes);
+    if(changes)await logActivity('update','song',editSongId,payload.liedanfang||payload.title,changes);
+    // If no field changes, nothing to log (e.g. only PDF was changed)
   } else {
     await logActivity('create','song','new',payload.liedanfang||payload.title);
   }
@@ -1845,8 +1866,12 @@ async function saveEvent(){
   if((window._efMembers||[]).length&&!editEvId)await SB.from('attendance').upsert((window._efMembers).map(m=>({event_id:evId,member_id:m.id,status:''})),{onConflict:'event_id,member_id',ignoreDuplicates:true});
   if(editEvId){
     const evBefore=cachedEvents?.find?.(e=>e.id===editEvId)||{};
-    const evChanges=diffObjects(evBefore,payload,['title','datum','uhrzeit','ort','dirigent','chor','thema','notizen','status','verschoben_auf']);
-    await logActivity('update','event',editEvId,payload.title,evChanges);
+    // Normalize time format (10:00:00 vs 10:00) before diffing
+    const normalizeT=v=>v?String(v).replace(/^(\d{2}:\d{2}):\d{2}$/,'$1'):v;
+    const evBeforeNorm={...evBefore,uhrzeit:normalizeT(evBefore.uhrzeit)};
+    const evPayloadNorm={...payload,uhrzeit:normalizeT(payload.uhrzeit)};
+    const evChanges=diffObjects(evBeforeNorm,evPayloadNorm,['title','datum','uhrzeit','ort','dirigent','chor','thema','notizen','status','verschoben_auf']);
+    if(evChanges)await logActivity('update','event',editEvId,payload.title,evChanges);
   } else {
     await logActivity('create','event',evId||'new',payload.title);
   }
@@ -4082,7 +4107,7 @@ async function renderSettings(tab='members'){
       <div class="fg"><label class="fl">Titel</label><input class="fi" id="af-title" placeholder="Betreff"></div>
       <div class="fg"><label class="fl">Nachricht</label><textarea class="fi" id="af-body" rows="3" style="resize:vertical"></textarea></div>
       <div class="fg"><label class="fl">Ablaufdatum (optional)</label><input class="fi" type="date" id="af-exp"></div>
-      <button class="btn btn-p" onclick="saveAnn(true)" style="width:100%;margin-top:4px">📢 Info veröffentlichen</button>
+      <button class="btn btn-p" id="af-pub-btn" onclick="saveAnn(true)" style="width:100%;margin-top:4px">📢 Info veröffentlichen</button>
       <div class="fst" style="margin-top:18px">Aktive Infos (${(anns||[]).length})</div>
       ${(anns||[]).length===0?'<p style="font-size:12px;color:var(--text3)">Keine Infos vorhanden.</p>':
         (anns||[]).map(a=>{
@@ -4093,7 +4118,10 @@ async function renderSettings(tab='members'){
               <div style="font-size:11px;color:var(--text2);margin-top:3px;white-space:pre-wrap">${esc(a.body||'')}</div>
               <div style="font-size:10px;color:${expired?'#e87070':'var(--success)'};margin-top:4px">${expired?'⏱ Abgelaufen':'✓ Aktiv'}${a.expires_at?' · bis '+fD(a.expires_at):''}</div>
             </div>
-            <button class="btn btn-sm" onclick="delAnn('${a.id}',true)" style="background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3);flex-shrink:0">🗑</button>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+              <button class="btn btn-sm btn-g" onclick="editAnn(${JSON.stringify(a).replace(/"/g,'&quot;')},true)" style="flex-shrink:0">✏️</button>
+              <button class="btn btn-sm" onclick="delAnn('${a.id}',true)" style="background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3);flex-shrink:0">🗑</button>
+            </div>
           </div>`;
         }).join('')}
     `;

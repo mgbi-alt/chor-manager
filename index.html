@@ -4628,7 +4628,6 @@ async function openQuelleBrowser(){
   await _quelleInit(body, true);
 }
 async function _quelleInit(body, inModal){
-  const body=document.getElementById('quelle-browser-body');
   body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
 
   const[{data:songs},{data:songFiles}]=await Promise.all([SB.from('songs').select('id,liedanfang,title,quelle,quelle_nr,in_repertoire,komponist'),SB.from('song_files').select('song_id').eq('file_type','chorsatz')]);

@@ -396,7 +396,6 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="ni" onclick="showPage('cal')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Kalender</div>
     <div class="ni" onclick="showPage('stats')"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats</div>
     <div class="ni" onclick="showPage('media')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Medien</div>
-    <div class="ni" id="ni-ann-btn" onclick="openAnnForm()" style="display:none"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Infos</div>
     <div class="ni" id="ni-settings" onclick="showPage('settings')" style="display:none"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Admin</div>
   </div>
 </div><!-- app -->
@@ -722,7 +721,6 @@ function startApp(){
   const isAdmin=p.role==='admin';
   if(isAdmin){
     document.getElementById('ni-settings').style.display='flex';
-    document.getElementById('ni-ann-btn').style.display='flex';
     ['song-add-btn','song-ai-btn','ev-add-btn','ev-chat-btn','ev-export-btn','ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
   }
   SB.channel('rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>{loadUnread();if(document.getElementById('page-ann').classList.contains('active'))renderAnn();}).subscribe();
@@ -955,17 +953,17 @@ async function renderAnnAdminList(){
     el.appendChild(row);
   });
 }
-async function saveAnn(){
+async function saveAnn(inSettings=false){
   const title=document.getElementById('af-title').value.trim(),body=document.getElementById('af-body').value.trim();
   if(!title||!body){T('Titel und Text erforderlich','err');return;}
   await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:document.getElementById('af-exp').value||null,created_by:currentUser.id});
   document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';
-  renderAnnAdminList();
+  if(inSettings)renderSettings('infos');else renderAnnAdminList();
   renderAnn();T('Info veröffentlicht','ok');
   // Send push to all
   sendPushToAll('📢 '+title,body.substring(0,100));
 }
-async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);renderAnnAdminList();renderAnn();T('Info gelöscht');}
+async function delAnn(id,inSettings=false){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);if(inSettings)renderSettings('infos');else renderAnnAdminList();renderAnn();T('Info gelöscht');}
 
 // ========== SONGS ==========
 async function renderSongs(){
@@ -4071,8 +4069,36 @@ async function renderSettings(tab='members'){
   if(currentProfile?.role!=='admin'){document.getElementById('settings-body').innerHTML='<p style="color:var(--text2)">Nur für Admins.</p>';return;}
   const tabs=`<div class="view-tabs" style="margin-bottom:16px">
     <div class="vtab ${tab==='members'?'active':''}" onclick="renderSettings('members')">Mitglieder</div>
+    <div class="vtab ${tab==='infos'?'active':''}" onclick="renderSettings('infos')">Infos</div>
     <div class="vtab ${tab==='settings'?'active':''}" onclick="renderSettings('settings')">Einstellungen</div>
   </div>`;
+  if(tab==='infos'){
+    document.getElementById('settings-body').innerHTML=tabs+'<div id="infos-tab-body"><div class="loading"><div class="spin"></div>Lade…</div></div>';
+    const el=document.getElementById('infos-tab-body');
+    const{data:anns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+    const now=new Date();
+    el.innerHTML=`
+      <div class="fst">Neue Info erstellen</div>
+      <div class="fg"><label class="fl">Titel</label><input class="fi" id="af-title" placeholder="Betreff"></div>
+      <div class="fg"><label class="fl">Nachricht</label><textarea class="fi" id="af-body" rows="3" style="resize:vertical"></textarea></div>
+      <div class="fg"><label class="fl">Ablaufdatum (optional)</label><input class="fi" type="date" id="af-exp"></div>
+      <button class="btn btn-p" onclick="saveAnn(true)" style="width:100%;margin-top:4px">📢 Info veröffentlichen</button>
+      <div class="fst" style="margin-top:18px">Aktive Infos (${(anns||[]).length})</div>
+      ${(anns||[]).length===0?'<p style="font-size:12px;color:var(--text3)">Keine Infos vorhanden.</p>':
+        (anns||[]).map(a=>{
+          const expired=a.expires_at&&new Date(a.expires_at)<now;
+          return`<div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${esc(a.title)}</div>
+              <div style="font-size:11px;color:var(--text2);margin-top:3px;white-space:pre-wrap">${esc(a.body||'')}</div>
+              <div style="font-size:10px;color:${expired?'#e87070':'var(--success)'};margin-top:4px">${expired?'⏱ Abgelaufen':'✓ Aktiv'}${a.expires_at?' · bis '+fD(a.expires_at):''}</div>
+            </div>
+            <button class="btn btn-sm" onclick="delAnn('${a.id}',true)" style="background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3);flex-shrink:0">🗑</button>
+          </div>`;
+        }).join('')}
+    `;
+    return;
+  }
   if(tab==='settings'){
     await loadCategories();
     document.getElementById('settings-body').innerHTML=tabs+`
@@ -4089,14 +4115,7 @@ async function renderSettings(tab='members'){
         <input type="color" id="new-cat-color" value="#5b8dee" style="width:40px;height:38px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--card);cursor:pointer;padding:3px">
         <button class="btn btn-p btn-sm" onclick="addCat()">+</button>
       </div>
-      <div class="st" style="margin-top:16px">Veranstaltungen importieren</div>
-      <div class="card" style="cursor:default">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Word-Dokument (.docx) oder Textdatei (.txt) mit Veranstaltungen importieren.</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Format: <code style="background:rgba(255,255,255,.06);padding:2px 5px;border-radius:4px">21.05.2023 Chor (Taufe)</code> gefolgt von Liedtiteln als Aufzählung.</div>
-        <input type="file" id="ev-import-file" accept=".txt,.docx" style="display:none" onchange="importEventsFile(event)">
-        <button class="btn btn-g" style="width:100%" onclick="document.getElementById('ev-import-file').click()">📄 Datei auswählen & importieren</button>
-        <div id="ev-import-status" style="margin-top:8px;font-size:12px"></div>
-      </div>
+      <div id="ev-import-status" style="display:none"></div>
       <div class="st" style="margin-top:16px">Liederdatenbank – PDF importieren</div>
       <div class="card" style="cursor:default">
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div>
@@ -4111,11 +4130,6 @@ async function renderSettings(tab='members'){
         <input type="file" id="db-pdf-reanalyze" accept=".pdf" style="display:none" onchange="reanalyzePdf(event)">
         <button class="btn btn-g" style="width:100%" onclick="document.getElementById('db-pdf-reanalyze').click()">🔄 Bestehende Daten nachkorrigieren</button>
         <div id="db-pdf-status" style="margin-top:10px;max-height:300px;overflow-y:auto"></div>
-      </div>
-      <div class="st" style="margin-top:16px">Infos & Mitteilungen</div>
-      <div class="card" style="cursor:default">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Infos auf dem Startbildschirm verwalten.</div>
-        <button class="btn btn-p" style="width:100%" onclick="openAnnForm()">📢 Infos verwalten</button>
       </div>
       <div class="st" style="margin-top:16px">Datenbank-Pflege</div>
       <div class="card" style="cursor:default">

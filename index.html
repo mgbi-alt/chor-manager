@@ -934,8 +934,19 @@ async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announc
 
 // ========== SONGS ==========
 async function renderSongs(){
-  const{data}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title');
-  cachedSongs=data||[];buildFilters();displaySongs(filteredSongs());updateSourceBtn();
+  const[{data},{data:allFiles}]=await Promise.all([
+    SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title'),
+    SB.from('song_files').select('song_id,file_type')
+  ]);
+  cachedSongs=data||[];
+  // Build file map: song_id -> sorted list of file_types
+  const FILE_ORDER=['chorsatz','klavier','orgel','instrumental','sonstiges'];
+  window._songFileMap=new Map();
+  (allFiles||[]).forEach(f=>{
+    if(!window._songFileMap.has(f.song_id))window._songFileMap.set(f.song_id,[]);
+    window._songFileMap.get(f.song_id).push(f.file_type);
+  });
+  buildFilters();displaySongs(filteredSongs());updateSourceBtn();
 }
 function updateSourceBtn(){
   const btn=document.getElementById('song-source-btn');if(!btn)return;
@@ -1026,9 +1037,14 @@ function displaySongs(songs){
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
     const isDbOnly=s.in_repertoire===false;
+    const fileTypes=window._songFileMap?.get(s.id)||[];
+    const FILE_ORDER=['chorsatz','klavier','orgel','instrumental','sonstiges'];
+    const FILE_ICONS={chorsatz:'📄',klavier:'🎹',orgel:'🎵',instrumental:'🎻',sonstiges:'📎'};
+    const FILE_LABELS={chorsatz:'Chorsatz',klavier:'Klavier',orgel:'Orgel',instrumental:'Instrumental',sonstiges:'Sonstiges'};
+    const fileBadges=FILE_ORDER.filter(t=>fileTypes.includes(t)).map(t=>`<span title="${FILE_LABELS[t]}" style="font-size:11px;opacity:.85">${FILE_ICONS[t]}</span>`).join('');
     return`<div class="card" onclick="openSongDetail('${s.id}')" style="${isDbOnly?'border-color:rgba(91,141,238,.2);background:rgba(91,141,238,.04)':''}">
       <div class="crow">
-        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
+        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}${fileBadges?` <span style="margin-left:4px">${fileBadges}</span>`:''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           ${s.besetzung?`<span class="badge">${esc(s.besetzung)}</span>`:''}
           ${isDbOnly?`<span class="badge blue" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();addToRepertoire('${s.id}')">+ Ins Repertoire</span>`:''}

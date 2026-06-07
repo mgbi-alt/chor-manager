@@ -396,6 +396,7 @@ textarea.fi{resize:vertical;min-height:70px;}
     <div class="ni" onclick="showPage('cal')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Kalender</div>
     <div class="ni" onclick="showPage('stats')"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats</div>
     <div class="ni" onclick="showPage('media')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Medien</div>
+    <div class="ni" id="ni-ann-btn" onclick="openAnnForm()" style="display:none"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Infos</div>
     <div class="ni" id="ni-settings" onclick="showPage('settings')" style="display:none"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Admin</div>
   </div>
 </div><!-- app -->
@@ -721,6 +722,7 @@ function startApp(){
   const isAdmin=p.role==='admin';
   if(isAdmin){
     document.getElementById('ni-settings').style.display='flex';
+    document.getElementById('ni-ann-btn').style.display='flex';
     ['song-add-btn','song-ai-btn','ev-add-btn','ev-chat-btn','ev-export-btn','ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
   }
   SB.channel('rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>{loadUnread();if(document.getElementById('page-ann').classList.contains('active'))renderAnn();}).subscribe();
@@ -736,7 +738,7 @@ function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name)?.classList.add('active');
-  const pages=['dashboard','ann','songs','events','cal','stats','media','settings'];
+  const pages=['dashboard','songs','events','cal','stats','media','settings'];
   const navItems=document.querySelectorAll('.ni');
   const idx=pages.indexOf(name);
   if(idx>=0&&navItems[idx])navItems[idx].classList.add('active');
@@ -754,7 +756,7 @@ window.addEventListener('popstate',e=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page)?.classList.add('active');
-  const pages=['dashboard','ann','songs','events','cal','stats','media','settings'];
+  const pages=['dashboard','songs','events','cal','stats','media','settings'];
   const navItems=document.querySelectorAll('.ni');
   const idx=pages.indexOf(page);
   if(idx>=0&&navItems[idx])navItems[idx].classList.add('active');
@@ -863,7 +865,13 @@ async function renderDash(){
   const unread=(anns||[]).filter(a=>!(a.announcement_reads||[]).some(r=>r.user_id===currentUser.id));
   // Show active announcements on dashboard (not expired)
   const{data:activeAnns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
-  document.getElementById('d-anns').innerHTML=(activeAnns||[]).filter(a=>!a.expires_at||new Date(a.expires_at)>new Date()).map(a=>`<div class="ann-banner urgent"><div class="ann-title">📢 ${esc(a.title)}</div><div class="ann-body">${esc(a.body||'')}</div></div>`).join('');
+  document.getElementById('d-anns').innerHTML=(activeAnns||[]).filter(a=>!a.expires_at||new Date(a.expires_at)>new Date()).map(a=>`<div style="background:rgba(224,85,85,.08);border:0.5px solid rgba(224,85,85,.35);border-radius:var(--r2);padding:12px 14px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <span style="font-size:14px">📢</span>
+      <span style="font-size:13px;font-weight:600;color:#f5a0a0">${esc(a.title)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap">${esc(a.body||'')}</div>
+  </div>`).join('');
   const{data:cevts}=await SB.from('calendar_events').select('*').gte('bis_datum',today()).order('datum').limit(4);
   document.getElementById('d-cal').innerHTML=(cevts||[]).length?cevts.map(e=>{
     const isMulti=e.bis_datum&&e.bis_datum!==e.datum;

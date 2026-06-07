@@ -985,16 +985,16 @@ async function delAnn(id,inSettings=false){if(!confirm('Löschen?'))return;await
 async function renderSongs(){
   const[{data},{data:allFiles},{data:perfStats}]=await Promise.all([
     SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title'),
-    SB.from('song_files').select('song_id,file_type'),
+    SB.from('song_files').select('song_id,file_type,url'),
     SB.from('song_performance_stats').select('song_id,last_performed,total_performances')
   ]);
   cachedSongs=data||[];
   // Build file map: song_id -> list of file_types
-  const FILE_ORDER=['chorsatz','klavier','orgel','instrumental','sonstiges'];
+  const FILE_ORDER=['chorsatz','klaviersatz','chor_klavier','orchestersatz','sibelius'];
   window._songFileMap=new Map();
   (allFiles||[]).forEach(f=>{
     if(!window._songFileMap.has(f.song_id))window._songFileMap.set(f.song_id,[]);
-    window._songFileMap.get(f.song_id).push(f.file_type);
+    window._songFileMap.get(f.song_id).push({type:f.file_type,url:f.url});
   });
   // Build performance map: song_id -> {last_performed, total_performances}
   window._songPerfMap=new Map();
@@ -1090,11 +1090,11 @@ function displaySongs(songs){
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
     const isDbOnly=s.in_repertoire===false;
-    const fileTypes=window._songFileMap?.get(s.id)||[];
-    const FILE_ORDER=['chorsatz','klavier','orgel','instrumental','sonstiges'];
-    const FILE_ICONS={chorsatz:'📄',klavier:'🎹',orgel:'🎵',instrumental:'🎻',sonstiges:'📎'};
-    const FILE_LABELS={chorsatz:'Chorsatz',klavier:'Klavier',orgel:'Orgel',instrumental:'Instrumental',sonstiges:'Sonstiges'};
-    const fileBadges=FILE_ORDER.filter(t=>fileTypes.includes(t)).map(t=>`<span title="${FILE_LABELS[t]}" style="font-size:11px;opacity:.85">${FILE_ICONS[t]}</span>`).join('');
+    const fileEntries=window._songFileMap?.get(s.id)||[];
+    const FILE_ORDER=['chorsatz','klaviersatz','chor_klavier','orchestersatz','sibelius'];
+    const FILE_ICONS={chorsatz:'📄',klaviersatz:'🎹',chor_klavier:'📄🎹',orchestersatz:'🎻',sibelius:'🎼'};
+    const FILE_LABELS={chorsatz:'Chorsatz',klaviersatz:'Klaviersatz',chor_klavier:'Chor+Klavier',orchestersatz:'Orchestersatz',sibelius:'Sibelius-Datei'};
+    const fileBadges=FILE_ORDER.filter(t=>fileEntries.some(e=>e.type===t)).map(t=>{const entry=fileEntries.find(e=>e.type===t);const isSib=t==='sibelius';return`<a href="${esc(entry?.url||'#')}" ${isSib?'download':'target="_blank"'} rel="noopener" title="${FILE_LABELS[t]} ${isSib?'herunterladen':'öffnen'}" onclick="event.stopPropagation()" style="font-size:12px;opacity:.85;text-decoration:none;cursor:pointer">${FILE_ICONS[t]}</a>`;}).join('');
     const perfBadge=(()=>{const p=window._songPerfMap?.get(s.id);if(!p)return'<span style="font-size:9px;color:var(--text3)">Noch nie</span>';const d=new Date(p.last_performed);const months=Math.round((Date.now()-d)/2628e6);const ago=months===0?'diesen Monat':months===1?'vor 1 Monat':months<12?`vor ${months} M.`:months<24?'vor 1 Jahr':`vor ${Math.floor(months/12)} J.`;return`<span style="font-size:9px;color:var(--text3)" title="${fD(p.last_performed)} · ${p.total_performances}×">${ago}</span>`;})();
     return`<div class="card" onclick="openSongDetail('${s.id}')" style="${isDbOnly?'border-color:rgba(91,141,238,.2);background:rgba(91,141,238,.04)':''}">
       <div class="crow">
@@ -1216,7 +1216,7 @@ async function uploadSongFile(songId, fileType, inputEl){
   input.value='';
   // Log file upload
   const s=cachedSongs.find(x=>x.id===songId);
-  const typeLabels={chorsatz:'Chorsatz',klavier:'Klavier',orgel:'Orgel',instrumental:'Instrumental',sonstiges:'Sonstiges'};
+  const typeLabels={chorsatz:'Chorsatz',klaviersatz:'Klaviersatz',chor_klavier:'Chor+Klavier',orchestersatz:'Orchestersatz',sibelius:'Sibelius-Datei'};
   await logActivity('update','song',songId,(s?.liedanfang||s?.title||songId),{datei:{von:null,nach:typeLabels[fileType]||fileType}});
   T('✓ Datei hochgeladen','ok');
 }
@@ -4095,8 +4095,14 @@ async function renderSettings(tab='members'){
   const tabs=`<div class="view-tabs" style="margin-bottom:16px">
     <div class="vtab ${tab==='members'?'active':''}" onclick="renderSettings('members')">Mitglieder</div>
     <div class="vtab ${tab==='infos'?'active':''}" onclick="renderSettings('infos')">Infos</div>
+    <div class="vtab ${tab==='quelle'?'active':''}" onclick="renderSettings('quelle')">Quellen</div>
     <div class="vtab ${tab==='settings'?'active':''}" onclick="renderSettings('settings')">Einstellungen</div>
   </div>`;
+  if(tab==='quelle'){
+    document.getElementById('settings-body').innerHTML=tabs+'<div id="quelle-tab-body" style="padding-top:4px"></div>';
+    await renderQuelleTab(document.getElementById('quelle-tab-body'));
+    return;
+  }
   if(tab==='infos'){
     document.getElementById('settings-body').innerHTML=tabs+'<div id="infos-tab-body"><div class="loading"><div class="spin"></div>Lade…</div></div>';
     const el=document.getElementById('infos-tab-body');
@@ -4164,7 +4170,6 @@ async function renderSettings(tab='members'){
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Themen & Anlässe vereinheitlichen: Zusammenführt doppelte Labels, normalisiert Schreibweisen und überführt alle Anlass-Werte in das Thema-Feld.</div>
         <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
-        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openBackup()">💾 Backup erstellen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openActivityLog()">📋 Aktivitätsprotokoll</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openPdfReassign()">🔧 PDF-Zuordnung korrigieren</button>
@@ -4613,10 +4618,18 @@ async function executeMerge(group,merged){
 
 
 // ========== QUELLE BROWSER ==========
+async function renderQuelleTab(container){
+  await _quelleInit(container, false);
+}
 async function openQuelleBrowser(){
   const body=document.getElementById('quelle-browser-body');
   body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
   openModal('m-quelle-browser');
+  await _quelleInit(body, true);
+}
+async function _quelleInit(body, inModal){
+  const body=document.getElementById('quelle-browser-body');
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
 
   const[{data:songs},{data:songFiles}]=await Promise.all([SB.from('songs').select('id,liedanfang,title,quelle,quelle_nr,in_repertoire,komponist'),SB.from('song_files').select('song_id').eq('file_type','chorsatz')]);
   const fileMap=new Set((songFiles||[]).map(f=>f.song_id));
@@ -4763,7 +4776,17 @@ async function openQuelleBrowser(){
       pdfBadge.textContent='📄';
 
       row.appendChild(nrCell);row.appendChild(nameCell);row.appendChild(pdfBadge);row.appendChild(repBadge);
-      row.onclick=()=>{closeModal('m-quelle-browser');openSongDetail(s.id);};
+      row.onclick=()=>{
+        if(inModal)closeModal('m-quelle-browser');
+        else showPage('songs');
+        // Wait for cachedSongs to be ready then open detail
+        const tryOpen=()=>{
+          const found=cachedSongs.find(x=>x.id===s.id);
+          if(found){openSongDetail(s.id);}
+          else{renderSongs().then(()=>openSongDetail(s.id));}
+        };
+        setTimeout(tryOpen,inModal?0:300);
+      };
       table.appendChild(row);
     });
     resultArea.appendChild(table);

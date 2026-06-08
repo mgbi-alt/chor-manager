@@ -861,6 +861,8 @@ async function renderDash(){
   document.getElementById('ds-songs').textContent=sc||0;document.getElementById('ds-events').textContent=ec||0;
   const{data:anns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
   const unread=(anns||[]).filter(a=>!(a.announcement_reads||[]).some(r=>r.user_id===currentUser.id));
+  // Clear app badge when dashboard is viewed
+  try{if(navigator.clearAppBadge)navigator.clearAppBadge();}catch(e){}
   // Show active announcements on dashboard (not expired)
   const{data:activeAnns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
   document.getElementById('d-anns').innerHTML=(activeAnns||[]).filter(a=>!a.expires_at||new Date(a.expires_at)>new Date()).map(a=>`<div style="background:rgba(224,85,85,.08);border:0.5px solid rgba(224,85,85,.35);border-radius:var(--r2);padding:12px 14px;margin-bottom:8px">
@@ -965,6 +967,8 @@ async function saveAnn(inSettings=false){
   } else {
     await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:exp,created_by:currentUser.id});
     sendPushToAll('📢 '+title,body.substring(0,100));
+    // Set app badge count for all active announcements
+    try{const{data:ac}=await SB.from('announcements').select('id').is('expires_at',null);if(navigator.setAppBadge)navigator.setAppBadge(ac?.length||1);}catch(e){}
     T('Info veröffentlicht','ok');
   }
   document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';

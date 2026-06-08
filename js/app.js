@@ -137,12 +137,18 @@ async function sendPushToAll(title,body){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
       body:JSON.stringify({title,body,url:'/chor-manager/',badgeCount:1})
     });
+    const resText=await res.text().catch(()=>'');
     if(!res.ok){
-      const txt=await res.text().catch(()=>'');
-      console.error('Push Fehler',res.status,txt);
-      T('Push-Fehler '+res.status+': '+txt.slice(0,80),'err');
+      console.error('Push Fehler',res.status,resText);
+      T('Push-Fehler '+res.status+': '+resText.slice(0,80),'err');
     } else {
-      console.log('Push gesendet');
+      console.log('Push response:',resText);
+      try{
+        const d=JSON.parse(resText);
+        if(d.sent===0||d.results?.every(r=>!r.success)){
+          T('Push gesendet, aber keine Empfänger erreicht – Abo prüfen','warn');
+        }
+      }catch(_){}
     }
   }catch(e){
     console.error('Push send error:',e);

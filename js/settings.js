@@ -17,14 +17,21 @@ function openProfile(){
       <button class="btn btn-d" style="width:100%;margin-top:8px" onclick="doLogout()">Abmelden</button>
     </div>`;
   openModal('m-profile');
-  // Push-Status prüfen
+  // Push-Status prüfen (Browser + Datenbank)
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(sub=>{
+    navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(async sub=>{
       const btn=document.getElementById('push-btn');
       const status=document.getElementById('push-status');
       if(sub){
         if(btn){btn.textContent='✓ Push aktiv';btn.disabled=true;btn.style.opacity='.6';}
-        if(status)status.textContent='Benachrichtigungen sind aktiviert.';
+        // Prüfe ob Subscription auch in DB gespeichert ist
+        const{data:dbSubs}=await SB.from('push_subscriptions').select('id').eq('user_id',currentUser.id);
+        if(dbSubs?.length){
+          if(status)status.textContent='✓ Aktiviert & in Datenbank gespeichert.';
+        } else {
+          if(status)status.innerHTML='⚠️ Aktiviert, aber <b>nicht in Datenbank</b> – bitte erneut aktivieren.';
+          if(btn){btn.textContent='🔔 Erneut aktivieren';btn.disabled=false;btn.style.opacity='1';}
+        }
       } else {
         if(status)status.textContent='Noch nicht aktiviert.';
       }

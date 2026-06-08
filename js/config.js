@@ -1,4 +1,3 @@
-// ========== CONFIG / UTILS / AUTH ==========
 // ========== GLOBALS ==========
 const SB_URL='https://nzgmznxwtvmjatbhbmcp.supabase.co';
 const SB_KEY='sb_publishable_rTWG_fw_Us_yA4ZayeR9sw_glQ-rrP-';

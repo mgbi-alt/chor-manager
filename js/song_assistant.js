@@ -1,5 +1,4 @@
 // ========== SONG ASSISTANT ==========
-// ========== SONG ASSISTANT ==========
 let _sastSuggestIdx=-1,_sastMode=null,_sastPendingSong=null;
 
 function openSongAssistant(){
@@ -756,8 +755,45 @@ async function renderSettings(tab='members'){
   if(currentProfile?.role!=='admin'){document.getElementById('settings-body').innerHTML='<p style="color:var(--text2)">Nur für Admins.</p>';return;}
   const tabs=`<div class="view-tabs" style="margin-bottom:16px">
     <div class="vtab ${tab==='members'?'active':''}" onclick="renderSettings('members')">Mitglieder</div>
+    <div class="vtab ${tab==='infos'?'active':''}" onclick="renderSettings('infos')">Infos</div>
+    <div class="vtab ${tab==='quelle'?'active':''}" onclick="renderSettings('quelle')">Quellen</div>
     <div class="vtab ${tab==='settings'?'active':''}" onclick="renderSettings('settings')">Einstellungen</div>
   </div>`;
+  if(tab==='quelle'){
+    document.getElementById('settings-body').innerHTML=tabs+'<div id="quelle-tab-body" style="padding-top:4px"></div>';
+    await renderQuelleTab(document.getElementById('quelle-tab-body'));
+    return;
+  }
+  if(tab==='infos'){
+    document.getElementById('settings-body').innerHTML=tabs+'<div id="infos-tab-body"><div class="loading"><div class="spin"></div>Lade…</div></div>';
+    const el=document.getElementById('infos-tab-body');
+    const{data:anns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+    const now=new Date();
+    el.innerHTML=`
+      <div class="fst">Neue Info erstellen</div>
+      <div class="fg"><label class="fl">Titel</label><input class="fi" id="af-title" placeholder="Betreff"></div>
+      <div class="fg"><label class="fl">Nachricht</label><textarea class="fi" id="af-body" rows="3" style="resize:vertical"></textarea></div>
+      <div class="fg"><label class="fl">Ablaufdatum (optional)</label><input class="fi" type="date" id="af-exp"></div>
+      <button class="btn btn-p" id="af-pub-btn" onclick="saveAnn(true)" style="width:100%;margin-top:4px">📢 Info veröffentlichen</button>
+      <div class="fst" style="margin-top:18px">Aktive Infos (${(anns||[]).length})</div>
+      ${(anns||[]).length===0?'<p style="font-size:12px;color:var(--text3)">Keine Infos vorhanden.</p>':
+        (anns||[]).map(a=>{
+          const expired=a.expires_at&&new Date(a.expires_at)<now;
+          return`<div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${esc(a.title)}</div>
+              <div style="font-size:11px;color:var(--text2);margin-top:3px;white-space:pre-wrap">${esc(a.body||'')}</div>
+              <div style="font-size:10px;color:${expired?'#e87070':'var(--success)'};margin-top:4px">${expired?'⏱ Abgelaufen':'✓ Aktiv'}${a.expires_at?' · bis '+fD(a.expires_at):''}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+              <button class="btn btn-sm btn-g" onclick="editAnn(${JSON.stringify(a).replace(/"/g,'&quot;')},true)" style="flex-shrink:0">✏️</button>
+              <button class="btn btn-sm" onclick="delAnn('${a.id}',true)" style="background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3);flex-shrink:0">🗑</button>
+            </div>
+          </div>`;
+        }).join('')}
+    `;
+    return;
+  }
   if(tab==='settings'){
     await loadCategories();
     document.getElementById('settings-body').innerHTML=tabs+`
@@ -774,14 +810,7 @@ async function renderSettings(tab='members'){
         <input type="color" id="new-cat-color" value="#5b8dee" style="width:40px;height:38px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--card);cursor:pointer;padding:3px">
         <button class="btn btn-p btn-sm" onclick="addCat()">+</button>
       </div>
-      <div class="st" style="margin-top:16px">Veranstaltungen importieren</div>
-      <div class="card" style="cursor:default">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Word-Dokument (.docx) oder Textdatei (.txt) mit Veranstaltungen importieren.</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Format: <code style="background:rgba(255,255,255,.06);padding:2px 5px;border-radius:4px">21.05.2023 Chor (Taufe)</code> gefolgt von Liedtiteln als Aufzählung.</div>
-        <input type="file" id="ev-import-file" accept=".txt,.docx" style="display:none" onchange="importEventsFile(event)">
-        <button class="btn btn-g" style="width:100%" onclick="document.getElementById('ev-import-file').click()">📄 Datei auswählen & importieren</button>
-        <div id="ev-import-status" style="margin-top:8px;font-size:12px"></div>
-      </div>
+      <div id="ev-import-status" style="display:none"></div>
       <div class="st" style="margin-top:16px">Liederdatenbank – PDF importieren</div>
       <div class="card" style="cursor:default">
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Grosse PDF mit mehreren Liedern hochladen. Die KI erkennt alle Lieder und speichert sie in der Datenbank (nicht im Repertoire).</div>
@@ -802,8 +831,8 @@ async function renderSettings(tab='members'){
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Themen & Anlässe vereinheitlichen: Zusammenführt doppelte Labels, normalisiert Schreibweisen und überführt alle Anlass-Werte in das Thema-Feld.</div>
         <button class="btn btn-warn" style="width:100%;background:rgba(232,160,32,.15);color:#f5c06a;border:0.5px solid rgba(232,160,32,.3)" onclick="if(confirm('Labels in der Datenbank jetzt bereinigen? Das kann nicht rückgängig gemacht werden.'))runDbCleanup()">🧹 Labels bereinigen & vereinheitlichen</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openMergeTool()">🔍 Duplikate finden & zusammenführen</button>
-        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openQuelleBrowser()">📖 Quellenübersicht / fehlende Nummern</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openBackup()">💾 Backup erstellen</button>
+        <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openActivityLog()">📋 Aktivitätsprotokoll</button>
         <button class="btn btn-i" style="width:100%;margin-top:8px" onclick="openPdfReassign()">🔧 PDF-Zuordnung korrigieren</button>
       </div>
       <div class="st" style="margin-top:16px">Repertoire CSV</div>
@@ -899,50 +928,4 @@ async function addMember(){
   if(data?.user)await SB.from('profiles').upsert({id:data.user.id,name,email,phone,stimme,role2,role:'member',active:true});
   closeModal('m-add-member');renderSettings('members');T('Mitglied hinzugefügt','ok');
 }
-
-// ========== PROFILE ==========
-function openProfile(){
-  const p=currentProfile||{};const parts=(p.name||'').split(' ');const vname=parts[0]||'';const nname=parts.slice(1).join(' ')||'';
-  document.getElementById('prof-body').innerHTML=`
-    <div class="fs"><div class="fst">Persönliche Daten</div>
-      <div class="fr2"><div class="fg"><label class="fl">Vorname</label><input class="fi" id="pm-vname" value="${esc(vname)}"></div><div class="fg"><label class="fl">Nachname</label><input class="fi" id="pm-nname" value="${esc(nname)}"></div></div>
-      <div class="fr2"><div class="fg"><label class="fl">E-Mail</label><input class="fi" id="pm-email" value="${esc(p.email||'')}" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="pm-phone" value="${esc(p.phone||'')}" type="tel"></div></div>
-      <div class="fg"><label class="fl">Adresse</label><input class="fi" id="pm-addr" value="${esc(p.address||'')}"></div>
-      <div class="fg"><label class="fl">Stimmgruppe</label><select class="fi" id="pm-stimme">${['','Sopran','Alt','Tenor','Bass'].map(s=>`<option value="${s}" ${p.stimme===s?'selected':''}>${s||'– wählen –'}</option>`).join('')}</select></div>
-    </div>
-    <div class="fs"><div class="fst">Konto</div>
-      <div class="df"><div class="dl">Rolle</div><div class="dv"><span class="badge ${p.role==='admin'?'warn':''}">${p.role==='admin'?'Admin':'Mitglied'}</span>${p.role2?` <span class="badge blue">${esc(p.role2.split(',').map(r=>r==='dirigent'?'Dirigent':'Klavier').join(' & '))}</span>`:''}</div></div>
-      <div class="fg" style="margin-top:10px"><label class="fl">Neues Passwort</label><input class="fi" id="pm-pass" type="password" placeholder="Leer lassen = nicht ändern"></div>
-      <div class="fg"><label class="fl">Passwort bestätigen</label><input class="fi" id="pm-pass2" type="password" placeholder="Passwort wiederholen"></div>
-      <button class="btn btn-i" style="width:100%;margin-top:8px" id="push-btn" onclick="enablePush()">🔔 Push-Benachrichtigungen aktivieren</button>
-      <button class="btn btn-d" style="width:100%;margin-top:8px" onclick="doLogout()">Abmelden</button>
-    </div>`;
-  openModal('m-profile');
-}
-async function saveProfile(){
-  const vname=document.getElementById('pm-vname').value.trim(),nname=document.getElementById('pm-nname').value.trim();
-  const name=(vname+' '+nname).trim();
-  const u={name,phone:document.getElementById('pm-phone').value.trim(),address:document.getElementById('pm-addr').value.trim(),stimme:document.getElementById('pm-stimme').value};
-  await SB.from('profiles').update(u).eq('id',currentUser.id);
-  // Password change
-  const pass=document.getElementById('pm-pass')?.value;
-  const pass2=document.getElementById('pm-pass2')?.value;
-  if(pass){
-    if(pass!==pass2){T('Passwörter stimmen nicht überein','err');return;}
-    if(pass.length<6){T('Passwort muss mindestens 6 Zeichen haben','err');return;}
-    const{error}=await SB.auth.updateUser({password:pass});
-    if(error){T('Passwort-Fehler: '+error.message,'err');return;}
-    T('Profil & Passwort gespeichert','ok');
-  } else {
-    T('Profil gespeichert','ok');
-  }
-  currentProfile={...currentProfile,...u};
-  document.getElementById('tb-name').textContent=name;
-  document.getElementById('tb-av').textContent=initials(name)||'?';
-  closeModal('m-profile');
-}
-
-// ========== MODAL CLOSE ==========
-document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
-document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 

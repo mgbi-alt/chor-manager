@@ -1,4 +1,3 @@
-// ========== APP ==========
 // ========== APP START ==========
 function startApp(){
   document.getElementById('login-screen').style.display='none';
@@ -24,7 +23,7 @@ function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name)?.classList.add('active');
-  const pages=['dashboard','ann','songs','events','cal','stats','media','settings'];
+  const pages=['dashboard','songs','events','cal','stats','media','settings'];
   const navItems=document.querySelectorAll('.ni');
   const idx=pages.indexOf(name);
   if(idx>=0&&navItems[idx])navItems[idx].classList.add('active');
@@ -42,7 +41,7 @@ window.addEventListener('popstate',e=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page)?.classList.add('active');
-  const pages=['dashboard','ann','songs','events','cal','stats','media','settings'];
+  const pages=['dashboard','songs','events','cal','stats','media','settings'];
   const navItems=document.querySelectorAll('.ni');
   const idx=pages.indexOf(page);
   if(idx>=0&&navItems[idx])navItems[idx].classList.add('active');
@@ -147,15 +146,33 @@ async function renderDash(){
   document.getElementById('d-greet').textContent=`${h<12?'Guten Morgen':h<18?'Guten Tag':'Guten Abend'}, ${firstName((currentProfile||{}).name)}!`;
   const[{count:sc},{count:ec}]=await Promise.all([SB.from('songs').select('*',{count:'exact',head:true}),SB.from('events').select('*',{count:'exact',head:true})]);
   document.getElementById('ds-songs').textContent=sc||0;document.getElementById('ds-events').textContent=ec||0;
-  const{data:anns}=await SB.from('announcements').select('*,announcement_reads(user_id)').order('created_at',{ascending:false}).limit(5);
+  const{data:anns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
   const unread=(anns||[]).filter(a=>!(a.announcement_reads||[]).some(r=>r.user_id===currentUser.id));
-  document.getElementById('d-anns').innerHTML=unread.length?`<div class="st">Ungelesene Mitteilungen (${unread.length})</div>`+unread.slice(0,2).map(a=>`<div class="acard ${a.priority} unread" onclick="markRead('${a.id}');showPage('ann')"><b style="font-size:14px">${esc(a.title)}</b><div style="font-size:12px;color:var(--text2);margin-top:4px">${esc(a.body.substring(0,80))}${a.body.length>80?'…':''}</div></div>`).join(''):'';
+  // Clear app badge when dashboard is viewed
+  try{if(navigator.clearAppBadge)navigator.clearAppBadge();}catch(e){}
+  // Show active announcements on dashboard (not expired)
+  const{data:activeAnns}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+  document.getElementById('d-anns').innerHTML=(activeAnns||[]).filter(a=>!a.expires_at||new Date(a.expires_at)>new Date()).map(a=>`<div style="background:rgba(224,85,85,.08);border:0.5px solid rgba(224,85,85,.35);border-radius:var(--r2);padding:12px 14px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <span style="font-size:14px">📢</span>
+      <span style="font-size:13px;font-weight:600;color:#f5a0a0">${esc(a.title)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap">${esc(a.body||'')}</div>
+  </div>`).join('');
   const{data:cevts}=await SB.from('calendar_events').select('*').gte('bis_datum',today()).order('datum').limit(4);
   document.getElementById('d-cal').innerHTML=(cevts||[]).length?cevts.map(e=>{
     const isMulti=e.bis_datum&&e.bis_datum!==e.datum;
     const color=e.color||'var(--accent)';
-    return`<div class="cevt" style="border-left-color:${esc(color)}">
-      <div style="font-weight:500;font-size:13px">${esc(e.title)}</div>
+    const isKeinChor=e.status==='kein_chor';
+    const isVerschoben=e.status==='verschoben';
+    const isAbgesagt=e.status==='abgesagt';
+    let statusBadge='';
+    if(isKeinChor)statusBadge='<div style="color:#e87070;font-size:11px;font-weight:600;margin-bottom:2px">⚠ Chorprobe fällt aus</div>';
+    else if(isVerschoben)statusBadge='<div style="color:#e87070;font-size:11px;font-weight:600;margin-bottom:2px">⚠ Verschoben'+(e.verschoben_auf?' → '+fD(e.verschoben_auf):'')+' </div>';
+    else if(isAbgesagt)statusBadge='<div style="color:#e87070;font-size:11px;font-weight:600;margin-bottom:2px">⚠ Abgesagt</div>';
+    return`<div class="cevt" style="border-left-color:${esc(color)}${isKeinChor||isVerschoben||isAbgesagt?';border-color:rgba(224,85,85,.3)':''}">
+      ${statusBadge}
+      <div style="font-weight:500;font-size:13px;${isKeinChor||isAbgesagt?'text-decoration:line-through;opacity:.6':''}">${esc(e.title)}</div>
       <div style="font-size:11px;color:var(--text2)">${fD(e.datum)}${isMulti?' – '+fD(e.bis_datum):''} ${e.uhrzeit?'· '+fT(e.uhrzeit):''} ${e.ort?'· '+esc(e.ort):''}</div>
       ${isMulti?'<span class="badge blue" style="font-size:9px;margin-top:3px">Mehrtägig</span>':''}
     </div>`;
@@ -170,21 +187,7 @@ async function renderDash(){
     const evEnd=new Date(nowD);evEnd.setHours(h+2,m,0,0);
     return nowD<evEnd;
   }).slice(0,3);
-  document.getElementById('d-events').innerHTML=upEvts.length?upEvts.map(e=>{
-    const isKeinChor=e.status==='kein_chor'||(e.chor||'').toLowerCase().includes('kein');
-    const isVerschoben=e.status==='verschoben';
-    const isAbgesagt=e.status==='abgesagt';
-    let statusBadge='';
-    if(isKeinChor)statusBadge='<span style="color:#e87070;font-size:11px;font-weight:600">⚠ Chorprobe fällt aus</span>';
-    else if(isVerschoben)statusBadge='<span style="color:#e87070;font-size:11px;font-weight:600">⚠ Verschoben'+(e.verschoben_auf?' → '+fD(e.verschoben_auf):'')+' </span>';
-    else if(isAbgesagt)statusBadge='<span style="color:#e87070;font-size:11px;font-weight:600">⚠ Abgesagt</span>';
-    return`<div class="card" onclick="openEvDetail('${e.id}')" style="${isKeinChor||isVerschoben||isAbgesagt?'border-color:rgba(224,85,85,.3)':''}">
-      ${statusBadge?`<div style="margin-bottom:4px">${statusBadge}</div>`:''}
-      <div class="ct" style="${isKeinChor||isAbgesagt?'text-decoration:line-through;opacity:.6':''}">${esc(e.title)}</div>
-      <div class="cs">${fD(e.datum)} ${e.uhrzeit?'· '+fT(e.uhrzeit):''} · ${esc(e.ort||'')}</div>
-      ${(e.chor||e.thema)?`<div class="cmeta">${e.chor?`<span class="badge">${esc(e.chor)}</span>`:''} ${e.thema?`<span class="badge blue">${esc(e.thema)}</span>`:''}</div>`:''}
-    </div>`;
-  }).join(''):'<p style="color:var(--text3);font-size:12px">Keine Veranstaltungen</p>';
+  document.getElementById('d-events').innerHTML=upEvts.length?upEvts.map(e=>`<div class="card" onclick="openEvDetail('${e.id}')"><div class="ct">${esc(e.title)}</div><div class="cs">${fD(e.datum)} ${e.uhrzeit?'· '+fT(e.uhrzeit):''} · ${esc(e.ort||'')}</div>${(e.chor||e.thema)?`<div class="cmeta">${e.chor?`<span class="badge">${esc(e.chor)}</span>`:''} ${e.thema?`<span class="badge blue">${esc(e.thema)}</span>`:''}</div>`:''}</div>`).join(''):'<p style="color:var(--text3);font-size:12px">Keine Veranstaltungen</p>';
   loadUnread();
 }
 
@@ -212,14 +215,60 @@ async function renderAnn(){
   }).join('');loadUnread();
 }
 async function markRead(id){await SB.from('announcement_reads').upsert({announcement_id:id,user_id:currentUser.id},{onConflict:'announcement_id,user_id'});loadUnread();}
-function openAnnForm(){document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';openModal('m-ann-form');}
-async function saveAnn(){
+function openAnnForm(){
+  document.getElementById('af-title').value='';
+  document.getElementById('af-body').value='';
+  document.getElementById('af-exp').value='';
+  openModal('m-ann-form');
+  renderAnnAdminList();
+}
+async function renderAnnAdminList(){
+  const el=document.getElementById('af-ann-list');if(!el)return;
+  const{data}=await SB.from('announcements').select('*').order('created_at',{ascending:false});
+  if(!data||!data.length){el.innerHTML='<p style="font-size:12px;color:var(--text3)">Keine aktiven Infos.</p>';return;}
+  el.innerHTML='';
+  const now=new Date();
+  data.forEach(a=>{
+    const expired=a.expires_at&&new Date(a.expires_at)<now;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:6px;opacity:'+(expired?'.5':'1');
+    const info=document.createElement('div');info.style.flex='1';
+    info.innerHTML='<div style="font-size:12px;font-weight:500">'+esc(a.title)+'</div>'
+      +'<div style="font-size:10px;color:var(--text3)">'+(expired?'⏱ Abgelaufen':'✓ Aktiv')+(a.expires_at?' · bis '+fD(a.expires_at):'')+'</div>';
+    const del=document.createElement('button');del.className='btn btn-sm';del.textContent='🗑';
+    del.style.cssText='background:rgba(232,112,112,.1);color:#e87070;border:0.5px solid rgba(232,112,112,.3)';
+    del.onclick=()=>delAnn(a.id);
+    const editBtn=document.createElement('button');editBtn.className='btn btn-sm btn-g';editBtn.textContent='✏️';editBtn.style.marginRight='4px';editBtn.onclick=()=>editAnn(a,false);row.appendChild(info);row.appendChild(editBtn);row.appendChild(del);
+    el.appendChild(row);
+  });
+}
+let _editAnnId=null;
+async function saveAnn(inSettings=false){
   const title=document.getElementById('af-title').value.trim(),body=document.getElementById('af-body').value.trim();
   if(!title||!body){T('Titel und Text erforderlich','err');return;}
-  await SB.from('announcements').insert({title,body,priority:document.getElementById('af-prio').value,expires_at:document.getElementById('af-exp').value||null,created_by:currentUser.id});
-  closeModal('m-ann-form');renderAnn();T('Mitteilung gesendet','ok');
-  // Send push to all
-  sendPushToAll('📢 '+title,body.substring(0,100));
+  const exp=document.getElementById('af-exp').value||null;
+  if(_editAnnId){
+    await SB.from('announcements').update({title,body,expires_at:exp}).eq('id',_editAnnId);
+    _editAnnId=null;
+    T('Info aktualisiert','ok');
+  } else {
+    await SB.from('announcements').insert({title,body,priority:'urgent',expires_at:exp,created_by:currentUser.id});
+    sendPushToAll('📢 '+title,body.substring(0,100));
+    // Set app badge count for all active announcements
+    try{const{data:ac}=await SB.from('announcements').select('id').is('expires_at',null);if(navigator.setAppBadge)navigator.setAppBadge(ac?.length||1);}catch(e){}
+    T('Info veröffentlicht','ok');
+  }
+  document.getElementById('af-title').value='';document.getElementById('af-body').value='';document.getElementById('af-exp').value='';
+  const pubBtn=document.getElementById('af-pub-btn');if(pubBtn)pubBtn.textContent='📢 Info veröffentlichen';
+  if(inSettings)renderSettings('infos');else renderAnnAdminList();
+  renderAnn();
 }
-async function delAnn(id){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);renderAnn();}
+function editAnn(a,inSettings=false){
+  _editAnnId=a.id;
+  const t=document.getElementById('af-title');const b=document.getElementById('af-body');const e=document.getElementById('af-exp');
+  if(t)t.value=a.title||'';if(b)b.value=a.body||'';if(e)e.value=a.expires_at?a.expires_at.substring(0,10):'';
+  const pubBtn=document.getElementById('af-pub-btn');if(pubBtn)pubBtn.textContent='💾 Änderungen speichern';
+  t?.scrollIntoView({behavior:'smooth',block:'center'});t?.focus();
+}
+async function delAnn(id,inSettings=false){if(!confirm('Löschen?'))return;await SB.from('announcements').delete().eq('id',id);if(inSettings)renderSettings('infos');else renderAnnAdminList();renderAnn();T('Info gelöscht');}
 

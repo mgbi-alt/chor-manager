@@ -1,4 +1,49 @@
-// ========== SETTINGS ==========
+// ========== PROFILE ==========
+function openProfile(){
+  const p=currentProfile||{};const parts=(p.name||'').split(' ');const vname=parts[0]||'';const nname=parts.slice(1).join(' ')||'';
+  document.getElementById('prof-body').innerHTML=`
+    <div class="fs"><div class="fst">Persönliche Daten</div>
+      <div class="fr2"><div class="fg"><label class="fl">Vorname</label><input class="fi" id="pm-vname" value="${esc(vname)}"></div><div class="fg"><label class="fl">Nachname</label><input class="fi" id="pm-nname" value="${esc(nname)}"></div></div>
+      <div class="fr2"><div class="fg"><label class="fl">E-Mail</label><input class="fi" id="pm-email" value="${esc(p.email||'')}" type="email"></div><div class="fg"><label class="fl">Telefon</label><input class="fi" id="pm-phone" value="${esc(p.phone||'')}" type="tel"></div></div>
+      <div class="fg"><label class="fl">Adresse</label><input class="fi" id="pm-addr" value="${esc(p.address||'')}"></div>
+      <div class="fg"><label class="fl">Stimmgruppe</label><select class="fi" id="pm-stimme">${['','Sopran','Alt','Tenor','Bass'].map(s=>`<option value="${s}" ${p.stimme===s?'selected':''}>${s||'– wählen –'}</option>`).join('')}</select></div>
+    </div>
+    <div class="fs"><div class="fst">Konto</div>
+      <div class="df"><div class="dl">Rolle</div><div class="dv"><span class="badge ${p.role==='admin'?'warn':''}">${p.role==='admin'?'Admin':'Mitglied'}</span>${p.role2?` <span class="badge blue">${esc(p.role2.split(',').map(r=>r==='dirigent'?'Dirigent':'Klavier').join(' & '))}</span>`:''}</div></div>
+      <div class="fg" style="margin-top:10px"><label class="fl">Neues Passwort</label><input class="fi" id="pm-pass" type="password" placeholder="Leer lassen = nicht ändern"></div>
+      <div class="fg"><label class="fl">Passwort bestätigen</label><input class="fi" id="pm-pass2" type="password" placeholder="Passwort wiederholen"></div>
+      <button class="btn btn-i" style="width:100%;margin-top:8px" id="push-btn" onclick="enablePush()">🔔 Push-Benachrichtigungen aktivieren</button>
+      <button class="btn btn-d" style="width:100%;margin-top:8px" onclick="doLogout()">Abmelden</button>
+    </div>`;
+  openModal('m-profile');
+}
+async function saveProfile(){
+  const vname=document.getElementById('pm-vname').value.trim(),nname=document.getElementById('pm-nname').value.trim();
+  const name=(vname+' '+nname).trim();
+  const u={name,phone:document.getElementById('pm-phone').value.trim(),address:document.getElementById('pm-addr').value.trim(),stimme:document.getElementById('pm-stimme').value};
+  await SB.from('profiles').update(u).eq('id',currentUser.id);
+  // Password change
+  const pass=document.getElementById('pm-pass')?.value;
+  const pass2=document.getElementById('pm-pass2')?.value;
+  if(pass){
+    if(pass!==pass2){T('Passwörter stimmen nicht überein','err');return;}
+    if(pass.length<6){T('Passwort muss mindestens 6 Zeichen haben','err');return;}
+    const{error}=await SB.auth.updateUser({password:pass});
+    if(error){T('Passwort-Fehler: '+error.message,'err');return;}
+    T('Profil & Passwort gespeichert','ok');
+  } else {
+    T('Profil gespeichert','ok');
+  }
+  currentProfile={...currentProfile,...u};
+  document.getElementById('tb-name').textContent=name;
+  document.getElementById('tb-av').textContent=initials(name)||'?';
+  closeModal('m-profile');
+}
+
+// ========== MODAL CLOSE ==========
+document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
 // ========== DB CLEANUP ==========
 async function runDbCleanup(){
   // Merge map: old value (lowercase) -> canonical value
@@ -303,10 +348,17 @@ async function executeMerge(group,merged){
 
 
 // ========== QUELLE BROWSER ==========
+async function renderQuelleTab(container){
+  await _quelleInit(container, false);
+}
 async function openQuelleBrowser(){
   const body=document.getElementById('quelle-browser-body');
   body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
   openModal('m-quelle-browser');
+  await _quelleInit(body, true);
+}
+async function _quelleInit(body, inModal){
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade Daten…</p>';
 
   const[{data:songs},{data:songFiles}]=await Promise.all([SB.from('songs').select('id,liedanfang,title,quelle,quelle_nr,in_repertoire,komponist'),SB.from('song_files').select('song_id').eq('file_type','chorsatz')]);
   const fileMap=new Set((songFiles||[]).map(f=>f.song_id));
@@ -453,7 +505,17 @@ async function openQuelleBrowser(){
       pdfBadge.textContent='📄';
 
       row.appendChild(nrCell);row.appendChild(nameCell);row.appendChild(pdfBadge);row.appendChild(repBadge);
-      row.onclick=()=>{closeModal('m-quelle-browser');openSongDetail(s.id);};
+      row.onclick=()=>{
+        if(inModal)closeModal('m-quelle-browser');
+        else showPage('songs');
+        // Wait for cachedSongs to be ready then open detail
+        const tryOpen=()=>{
+          const found=cachedSongs.find(x=>x.id===s.id);
+          if(found){openSongDetail(s.id);}
+          else{renderSongs().then(()=>openSongDetail(s.id));}
+        };
+        setTimeout(tryOpen,inModal?0:300);
+      };
       table.appendChild(row);
     });
     resultArea.appendChild(table);
@@ -1082,6 +1144,126 @@ async function savePdfReassign(){
   closeModal('m-pdf-reassign');
 }
 
+
+// ========== ACTIVITY LOG ==========
+async function logActivity(action, entity, entityId, entityTitle, changes=null){
+  try{
+    await SB.from('activity_log').insert({
+      user_id: currentUser?.id||null,
+      user_name: currentProfile?.name||currentUser?.email||'Unbekannt',
+      action,        // 'create' | 'update' | 'delete'
+      entity,        // 'song' | 'event' | 'calendar_event' etc.
+      entity_id: String(entityId||''),
+      entity_title: entityTitle||'',
+      changes: changes?JSON.stringify(changes):null,
+    });
+  }catch(e){console.warn('Log failed:',e);}
+}
+
+function diffObjects(before, after, fields){
+  const changes={};
+  for(const f of fields){
+    const v1=String(before[f]??'');
+    const v2=String(after[f]??'');
+    if(v1!==v2)changes[f]={von:before[f]??null,nach:after[f]??null};
+  }
+  return Object.keys(changes).length?changes:null;
+}
+
+
+// ========== ACTIVITY LOG VIEW ==========
+async function openActivityLog(){
+  const body=document.getElementById('activity-log-body');
+  body.innerHTML='<p style="color:var(--text2);font-size:13px">Lade…</p>';
+  openModal('m-activity-log');
+
+  const{data:logs}=await SB.from('activity_log').select('*').order('created_at',{ascending:false}).limit(200);
+  if(!logs||!logs.length){body.innerHTML='<p style="color:var(--text2)">Noch keine Einträge.</p>';return;}
+
+  const actionLabel={create:'➕ Erstellt',update:'✏️ Geändert',delete:'🗑 Gelöscht'};
+  const entityLabel={song:'Lied',event:'Veranstaltung',calendar_event:'Termin',member:'Mitglied'};
+  const actionColor={create:'var(--success)',update:'#8fb3f5',delete:'#e87070'};
+
+  // Filter controls
+  const filterBar=document.createElement('div');
+  filterBar.style.cssText='display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center';
+
+  const filterEntity=document.createElement('select');
+  filterEntity.className='fi';filterEntity.style.cssText='flex:1;min-width:120px';
+  [['','Alle Typen'],['song','Lieder'],['event','Veranstaltungen']].forEach(([v,l])=>{
+    const o=document.createElement('option');o.value=v;o.textContent=l;filterEntity.appendChild(o);
+  });
+
+  const filterAction=document.createElement('select');
+  filterAction.className='fi';filterAction.style.cssText='flex:1;min-width:120px';
+  [['','Alle Aktionen'],['create','Erstellt'],['update','Geändert'],['delete','Gelöscht']].forEach(([v,l])=>{
+    const o=document.createElement('option');o.value=v;o.textContent=l;filterAction.appendChild(o);
+  });
+
+  filterBar.appendChild(filterEntity);filterBar.appendChild(filterAction);
+  body.innerHTML='';body.appendChild(filterBar);
+
+  const listEl=document.createElement('div');
+  body.appendChild(listEl);
+
+  function renderLog(){
+    const fe=filterEntity.value;
+    const fa=filterAction.value;
+    const filtered=logs.filter(l=>(!fe||l.entity===fe)&&(!fa||l.action===fa));
+
+    listEl.innerHTML='';
+    if(!filtered.length){listEl.innerHTML='<p style="color:var(--text2);font-size:12px">Keine Einträge.</p>';return;}
+
+    filtered.forEach(log=>{
+      const row=document.createElement('div');
+      row.style.cssText='padding:9px 12px;border-bottom:0.5px solid var(--border);display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start';
+
+      // Action badge
+      const badge=document.createElement('div');
+      badge.style.cssText='font-size:10px;color:'+actionColor[log.action]+';white-space:nowrap;padding-top:1px';
+      badge.textContent=actionLabel[log.action]||log.action;
+
+      // Main info
+      const info=document.createElement('div');
+      const title=document.createElement('div');
+      title.style.cssText='font-size:12px;font-weight:500';
+      title.textContent=(entityLabel[log.entity]||log.entity)+': '+(log.entity_title||log.entity_id||'–');
+      info.appendChild(title);
+
+      // Changes
+      if(log.changes){
+        try{
+          const ch=typeof log.changes==='string'?JSON.parse(log.changes):log.changes;
+          const fields=Object.keys(ch);
+          if(fields.length){
+            const chEl=document.createElement('div');
+            chEl.style.cssText='font-size:10px;color:var(--text3);margin-top:3px';
+            chEl.textContent=fields.map(f=>{
+              const v=ch[f];
+              const von=v.von!=null&&v.von!==''?String(v.von):'leer';
+              const nach=v.nach!=null&&v.nach!==''?String(v.nach):'leer';
+              return f+': '+von+' → '+nach;
+            }).join(' · ');
+            info.appendChild(chEl);
+          }
+        }catch(e){}
+      }
+
+      // Meta: user + time
+      const meta=document.createElement('div');
+      meta.style.cssText='font-size:10px;color:var(--text3);text-align:right;white-space:nowrap';
+      const d=new Date(log.created_at);
+      meta.innerHTML=esc(log.user_name||'?')+'<br>'+d.toLocaleDateString('de-DE')+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+      row.appendChild(badge);row.appendChild(info);row.appendChild(meta);
+      listEl.appendChild(row);
+    });
+  }
+
+  filterEntity.onchange=renderLog;filterAction.onchange=renderLog;
+  renderLog();
+}
+
 // ========== INIT ==========
 (async function init(){
   SB=window.supabase.createClient(SB_URL,SB_KEY);
@@ -1089,4 +1271,3 @@ async function savePdfReassign(){
   if(session?.user){await loadProfile(session.user);if(currentProfile?.active===false){document.getElementById('login-screen').style.display='flex';return;}startApp();}
   else document.getElementById('login-screen').style.display='flex';
 })();
-

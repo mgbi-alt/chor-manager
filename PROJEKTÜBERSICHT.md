@@ -6,11 +6,28 @@ Gebaut als einzelne `index.html` mit Vanilla JS, Supabase als Backend.
 Gehostet auf GitHub Pages: https://mgbi-alt.github.io/chor-manager/
 
 ## Tech Stack
-- **Frontend:** Vanilla HTML/CSS/JS (keine Frameworks), eine monolithische `index.html`
+- **Frontend:** Vanilla HTML/CSS/JS (keine Frameworks), aufgeteilt in `index.html` + separate JS/CSS-Dateien
 - **Backend:** Supabase (PostgreSQL, Auth, Storage, Edge Functions)
 - **Hosting:** GitHub Pages
 - **Push:** Supabase Edge Function `send-push` + Web Push API
 - **Service Worker:** `sw.js` für PWA + Push-Empfang
+
+## Dateistruktur
+| Datei | Inhalt |
+|-------|--------|
+| `index.html` | Nur HTML-Struktur + Link/Script-Referenzen (394 Zeilen) |
+| `css/main.css` | Gesamtes CSS (245 Zeilen) |
+| `js/config.js` | Globals, Utils, NRW-Feiertage, Auth |
+| `js/app.js` | App-Start, Push-Notifications, Unread, Dashboard, Ankündigungen |
+| `js/songs.js` | Liederverwaltung, CSV-Import/Export |
+| `js/events.js` | Veranstaltungen, Autocomplete, Excel-Export/Import |
+| `js/calendar.js` | Kalender, Touch-Swipe |
+| `js/stats.js` | Analytics/Statistiken |
+| `js/media.js` | Mediathek |
+| `js/assistant.js` | KI-Assistent |
+| `js/song_assistant.js` | Lied-Assistent |
+| `js/settings.js` | Admin-Bereich, DB-Cleanup, Merge, Backup, PDF-Reassign, Activity-Log, INIT |
+| `sw.js` | Service Worker |
 
 ## Supabase Konfiguration
 ```javascript

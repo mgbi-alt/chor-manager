@@ -1,8 +1,22 @@
 // ========== SONGS ==========
-// ========== SONGS ==========
 async function renderSongs(){
-  const{data}=await SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title');
-  cachedSongs=data||[];buildFilters();displaySongs(filteredSongs());updateSourceBtn();
+  const[{data},{data:allFiles},{data:perfStats}]=await Promise.all([
+    SB.from('songs').select('*').order('liedanfang',{nullsFirst:false}).order('title'),
+    SB.from('song_files').select('song_id,file_type,url'),
+    SB.from('song_performance_stats').select('song_id,last_performed,total_performances')
+  ]);
+  cachedSongs=data||[];
+  // Build file map: song_id -> list of file_types
+  const FILE_ORDER=['chorsatz','klaviersatz','chor_klavier','orchestersatz','sibelius'];
+  window._songFileMap=new Map();
+  (allFiles||[]).forEach(f=>{
+    if(!window._songFileMap.has(f.song_id))window._songFileMap.set(f.song_id,[]);
+    window._songFileMap.get(f.song_id).push({type:f.file_type,url:f.url});
+  });
+  // Build performance map: song_id -> {last_performed, total_performances}
+  window._songPerfMap=new Map();
+  (perfStats||[]).forEach(p=>{if(p.last_performed)window._songPerfMap.set(p.song_id,p);});
+  buildFilters();displaySongs(filteredSongs());updateSourceBtn();
 }
 function updateSourceBtn(){
   const btn=document.getElementById('song-source-btn');if(!btn)return;
@@ -93,11 +107,18 @@ function displaySongs(songs){
     const anlaesse=(s.anlass||'').split(',').map(a=>a.trim()).filter(Boolean);
     const allTags=[...themen.map(t=>`<span class="badge blue" style="font-size:9px">${esc(t)}</span>`), ...anlaesse.map(a=>`<span class="badge green" style="font-size:9px">${esc(a)}</span>`)].join('');
     const isDbOnly=s.in_repertoire===false;
+    const fileEntries=window._songFileMap?.get(s.id)||[];
+    const FILE_ORDER=['chorsatz','klaviersatz','chor_klavier','orchestersatz','sibelius'];
+    const FILE_ICONS={chorsatz:'📄',klaviersatz:'🎹',chor_klavier:'📄🎹',orchestersatz:'🎻',sibelius:'🎼'};
+    const FILE_LABELS={chorsatz:'Chorsatz',klaviersatz:'Klaviersatz',chor_klavier:'Chor+Klavier',orchestersatz:'Orchestersatz',sibelius:'Sibelius-Datei'};
+    const fileBadges=FILE_ORDER.filter(t=>fileEntries.some(e=>e.type===t)).map(t=>{const entry=fileEntries.find(e=>e.type===t);const isSib=t==='sibelius';return`<a href="${esc(entry?.url||'#')}" ${isSib?'download':'target="_blank"'} rel="noopener" title="${FILE_LABELS[t]} ${isSib?'herunterladen':'öffnen'}" onclick="event.stopPropagation()" style="font-size:12px;opacity:.85;text-decoration:none;cursor:pointer">${FILE_ICONS[t]}</a>`;}).join('');
+    const perfBadge=(()=>{const p=window._songPerfMap?.get(s.id);if(!p)return'<span style="font-size:9px;color:var(--text3)">Noch nie</span>';const d=new Date(p.last_performed);const months=Math.round((Date.now()-d)/2628e6);const ago=months===0?'diesen Monat':months===1?'vor 1 Monat':months<12?`vor ${months} M.`:months<24?'vor 1 Jahr':`vor ${Math.floor(months/12)} J.`;return`<span style="font-size:9px;color:var(--text3)" title="${fD(p.last_performed)} · ${p.total_performances}×">${ago}</span>`;})();
     return`<div class="card" onclick="openSongDetail('${s.id}')" style="${isDbOnly?'border-color:rgba(91,141,238,.2);background:rgba(91,141,238,.04)':''}">
       <div class="crow">
-        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
+        <div style="flex:1"><div class="ct">${haupttext}${isDbOnly?' <span style="font-size:9px;color:#8fb3f5;vertical-align:middle">DB</span>':''}${fileBadges?` <span style="margin-left:4px">${fileBadges}</span>`:''} ${perfBadge}</div><div class="cs">${esc(s.komponist)||'Unbekannt'}${s.arrangeur?' · Arr. '+esc(s.arrangeur):''}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           ${s.besetzung?`<span class="badge">${esc(s.besetzung)}</span>`:''}
+
           ${isDbOnly?`<span class="badge blue" style="font-size:9px;cursor:pointer" onclick="event.stopPropagation();addToRepertoire('${s.id}')">+ Ins Repertoire</span>`:''}
           ${allTags?`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:120px">${allTags}</div>`:''}
         </div>
@@ -210,6 +231,10 @@ async function uploadSongFile(songId, fileType, inputEl){
   const{error:dbErr}=await SB.from('song_files').upsert({song_id:songId,file_type:fileType,url:publicUrl,path},{onConflict:'song_id,file_type'});
   if(dbErr){T('DB-Fehler: '+dbErr.message,'err');return;}
   input.value='';
+  // Log file upload
+  const s=cachedSongs.find(x=>x.id===songId);
+  const typeLabels={chorsatz:'Chorsatz',klaviersatz:'Klaviersatz',chor_klavier:'Chor+Klavier',orchestersatz:'Orchestersatz',sibelius:'Sibelius-Datei'};
+  await logActivity('update','song',songId,(s?.liedanfang||s?.title||songId),{datei:{von:null,nach:typeLabels[fileType]||fileType}});
   T('✓ Datei hochgeladen','ok');
 }
 
@@ -288,21 +313,39 @@ async function saveSong(){
   if(editSongId){({error}=await SB.from('songs').update(payload).eq('id',editSongId));}
   else{({error}=await SB.from('songs').insert({...payload,in_repertoire:true,created_by:currentUser.id}));}
   if(error){T('Fehler: '+error.message,'err');return;}
+  // Log activity
+  if(editSongId){
+    const before=cachedSongs.find(s=>s.id===editSongId)||{};
+    const changes=diffObjects(before,payload,['title','liedanfang','besetzung','thema','komponist','textdichter','arrangeur','uebersetzer','rechte','lizenz','originaltitel','quelle','quelle_nr','bibelstelle','schrank','notizen']);
+    if(changes)await logActivity('update','song',editSongId,payload.liedanfang||payload.title,changes);
+    // If no field changes, nothing to log (e.g. only PDF was changed)
+  } else {
+    await logActivity('create','song','new',payload.liedanfang||payload.title);
+  }
   closeModal('m-song-form');renderSongs();T(editSongId?'Lied aktualisiert':'Lied hinzugefügt','ok');
 }
-async function delSong(id){await SB.from('songs').delete().eq('id',id);closeModal('m-song-detail');renderSongs();T('Lied gelöscht');}
+async function delSong(id){
+  const s=cachedSongs.find(x=>x.id===id);
+  await SB.from('songs').delete().eq('id',id);
+  await logActivity('delete','song',id,s?.liedanfang||s?.title||id);
+  closeModal('m-song-detail');renderSongs();T('Lied gelöscht');
+}
 async function removeFromRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:false}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}
   const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=false;
   closeModal('m-song-detail');
   displaySongs(filteredSongs());updateFilterCount();
+  const sr=cachedSongs.find(x=>x.id===id);
+  await logActivity('update','song',id,(sr?.liedanfang||sr?.title||id),{in_repertoire:{von:true,nach:false}});
   T('✓ Aus Repertoire entfernt','ok');
 }
 async function addToRepertoire(id){
   const{error}=await SB.from('songs').update({in_repertoire:true}).eq('id',id);
   if(error){T('Fehler: '+error.message,'err');return;}
   const s=cachedSongs.find(x=>x.id===id);if(s)s.in_repertoire=true;
+  const sa=cachedSongs.find(x=>x.id===id);
+  await logActivity('update','song',id,(sa?.liedanfang||sa?.title||id),{in_repertoire:{von:false,nach:true}});
   T('✅ Ins Repertoire aufgenommen','ok');
   closeModal('m-song-detail');
   displaySongs(filteredSongs());updateSourceBtn();

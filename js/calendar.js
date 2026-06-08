@@ -1,5 +1,4 @@
 // ========== CALENDAR ==========
-// ========== CALENDAR ==========
 async function loadCategories(){
   const{data}=await SB.from('cal_categories').select('*').order('name');
   cachedCategories=data||[

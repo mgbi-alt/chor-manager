@@ -1,4 +1,4 @@
-const CACHE = 'chormanager-v2';
+const CACHE = 'chormanager-v5';
 
 // ===== INSTALL =====
 self.addEventListener('install', e => {
@@ -69,3 +69,4 @@ self.addEventListener('pushsubscriptionchange', e => {
   // Subscription erneuern — wird vom App-Code behandelt
   console.log('Push subscription changed');
 });
+

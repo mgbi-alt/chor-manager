@@ -129,9 +129,12 @@ function urlB64ToUint8(b64){
 
 async function sendPushToAll(title,body){
   try{
+    const{data:{session}}=await SB.auth.getSession();
+    const token=session?.access_token;
+    if(!token){T('Push: nicht angemeldet','err');return;}
     const res=await fetch(SB_URL+'/functions/v1/send-push',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
       body:JSON.stringify({title,body,url:'/chor-manager/',badgeCount:1})
     });
     if(!res.ok){

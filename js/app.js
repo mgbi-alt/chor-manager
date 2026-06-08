@@ -112,7 +112,7 @@ async function savePushSub(sub){
     endpoint:json.endpoint,
     p256dh:json.keys.p256dh,
     auth:json.keys.auth
-  },{onConflict:'endpoint',ignoreDuplicates:true});
+  },{onConflict:'endpoint',ignoreDuplicates:false});
 }
 
 function urlB64ToUint8(b64){
@@ -124,12 +124,22 @@ function urlB64ToUint8(b64){
 
 async function sendPushToAll(title,body){
   try{
-    await fetch(SB_URL+'/functions/v1/send-push',{
+    const res=await fetch(SB_URL+'/functions/v1/send-push',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY},
-      body:JSON.stringify({title,body})
+      body:JSON.stringify({title,body,url:'/chor-manager/',badgeCount:1})
     });
-  }catch(e){console.log('Push send error:',e);}
+    if(!res.ok){
+      const txt=await res.text().catch(()=>'');
+      console.error('Push Fehler',res.status,txt);
+      T('Push-Fehler '+res.status+': '+txt.slice(0,80),'err');
+    } else {
+      console.log('Push gesendet');
+    }
+  }catch(e){
+    console.error('Push send error:',e);
+    T('Push konnte nicht gesendet werden: '+e.message,'err');
+  }
 }
 
 // ========== UNREAD ==========

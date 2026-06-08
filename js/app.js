@@ -56,8 +56,13 @@ const VAPID_PUBLIC='BPp1ZDfFrJXJ9dIq4H4_2or4nRdTCere6_EchSDS7hn40zUaWpiuDH1SDT1Y
 
 async function setupPush(){
   if(!('serviceWorker' in navigator))return;
-  // Register SW in background, don't await
-  navigator.serviceWorker.register('/chor-manager/sw.js').catch(e=>console.log('SW:',e));
+  const reg=await navigator.serviceWorker.register('/chor-manager/sw.js').catch(e=>{console.log('SW:',e);return null;});
+  if(!reg)return;
+  // Auto-Update: wenn neuer SW aktiviert wird, Seite neu laden
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    T('App aktualisiert – wird neu geladen…','ok');
+    setTimeout(()=>location.reload(),1500);
+  });
 }
 
 async function enablePush(){

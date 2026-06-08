@@ -13,9 +13,23 @@ function openProfile(){
       <div class="fg" style="margin-top:10px"><label class="fl">Neues Passwort</label><input class="fi" id="pm-pass" type="password" placeholder="Leer lassen = nicht ändern"></div>
       <div class="fg"><label class="fl">Passwort bestätigen</label><input class="fi" id="pm-pass2" type="password" placeholder="Passwort wiederholen"></div>
       <button class="btn btn-i" style="width:100%;margin-top:8px" id="push-btn" onclick="enablePush()">🔔 Push-Benachrichtigungen aktivieren</button>
+      <div id="push-status" style="font-size:11px;color:var(--text3);margin-top:4px;text-align:center"></div>
       <button class="btn btn-d" style="width:100%;margin-top:8px" onclick="doLogout()">Abmelden</button>
     </div>`;
   openModal('m-profile');
+  // Push-Status prüfen
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(sub=>{
+      const btn=document.getElementById('push-btn');
+      const status=document.getElementById('push-status');
+      if(sub){
+        if(btn){btn.textContent='✓ Push aktiv';btn.disabled=true;btn.style.opacity='.6';}
+        if(status)status.textContent='Benachrichtigungen sind aktiviert.';
+      } else {
+        if(status)status.textContent='Noch nicht aktiviert.';
+      }
+    }).catch(()=>{});
+  }
 }
 async function saveProfile(){
   const vname=document.getElementById('pm-vname').value.trim(),nname=document.getElementById('pm-nname').value.trim();

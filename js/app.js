@@ -1,4 +1,6 @@
 // ========== APP START ==========
+document.getElementById('app-version').textContent='v'+APP_VERSION;
+
 function startApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';

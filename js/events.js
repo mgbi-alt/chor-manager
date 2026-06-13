@@ -13,7 +13,7 @@ async function renderEvents(){
   // Show placeholder list
   const phEl=document.getElementById('ev-placeholders');
   const phBtn=document.getElementById('ev-ph-btn');
-  const rawPhs=(placeholders||[]).filter(p=>p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]')&&!p.placeholder.startsWith('[FreiesLied]'));
+  const rawPhs=(placeholders||[]).filter(p=>p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]')&&!p.placeholder.startsWith('[FreiesLied]')&&p.events?.datum&&p.events.datum<today());
   const phMap={};rawPhs.forEach(p=>{const k=p.placeholder.trim();if(!phMap[k])phMap[k]={placeholder:k,events:[],count:0};if(p.events)phMap[k].events.push(p.events);phMap[k].count++;});
   const phs=Object.values(phMap).sort((a,b)=>b.count-a.count);
   if(phs.length&&phEl&&phBtn){

@@ -13,7 +13,7 @@ async function renderEvents(){
   // Show placeholder list
   const phEl=document.getElementById('ev-placeholders');
   const phBtn=document.getElementById('ev-ph-btn');
-  const rawPhs=(placeholders||[]).filter(p=>p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]'));
+  const rawPhs=(placeholders||[]).filter(p=>p.placeholder&&!p.placeholder.startsWith('[Predigt]')&&!p.placeholder.startsWith('[Sonstiges]')&&!p.placeholder.startsWith('[FreiesLied]'));
   const phMap={};rawPhs.forEach(p=>{const k=p.placeholder.trim();if(!phMap[k])phMap[k]={placeholder:k,events:[],count:0};if(p.events)phMap[k].events.push(p.events);phMap[k].count++;});
   const phs=Object.values(phMap).sort((a,b)=>b.count-a.count);
   if(phs.length&&phEl&&phBtn){
@@ -126,6 +126,10 @@ async function openEvDetail(id){
     <div class="ddiv"></div>
     <div class="dl" style="margin-bottom:7px">Programm</div>
     ${prog.length?prog.map(p=>{
+      if(p.placeholder?.startsWith('[FreiesLied] ')){
+        const titel=p.placeholder.slice('[FreiesLied] '.length);
+        return`<div class="pitem"><div style="display:flex;align-items:center;gap:9px"><div class="pnum">${p.position}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">🎵 ${esc(titel)}</div><div style="font-size:11px;color:var(--text2)">Freies Lied</div></div></div></div>`;
+      }
       if(p.placeholder?.startsWith('[Predigt] ')){
         const parts=p.placeholder.slice(10).split('|');
         return`<div class="pitem"><div style="display:flex;align-items:center;gap:9px"><div class="pnum">${p.position}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">\ud83c\udfa4 Predigt${parts[0]?' \u2013 '+esc(parts[0]):''}</div><div style="font-size:11px;color:var(--text2)">${[parts[1],parts[2]].filter(Boolean).map(esc).join(' \u00b7 ')}</div></div></div></div>`;
@@ -240,16 +244,28 @@ function buildProgRow(pos,p={},songs=[]){
     const bes=s.besetzung?` [${s.besetzung}]`:'';
     return`<option value="${s.id}" ${s.id===(p.song_id||'')&&p.song_id?'selected':''}>${esc(label)}${esc(bes)}</option>`;
   }).join('');
-  const isPlaceholder=p.song_id===null&&(p.dirigent||p.klavier||p.instrumente||p.placeholder);
+  const isFreiesLied=p.placeholder?.startsWith('[FreiesLied] ');
+  const isPlaceholder=p.song_id===null&&!isFreiesLied&&(p.dirigent||p.klavier||p.instrumente||p.placeholder);
+  let selVal='';
+  if(isPlaceholder)selVal='__placeholder__';
+  else if(isFreiesLied)selVal='__freies_lied__';
+  const phVal=isFreiesLied?p.placeholder.slice('[FreiesLied] '.length):isPlaceholder?(p.placeholder||''):'';
+  const phLabel=isFreiesLied?'Liedtitel eingeben':'Beschreibung (z.B. Eingangslied)';
+  const showPh=isPlaceholder||isFreiesLied;
   return`<div class="ep-row prog-ep-row" draggable="true" ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dragDrop(event)" ondragend="dragEnd(event)">
     <div class="ep-row-header">
       <span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>
       <div class="pnum" style="width:22px;height:22px;font-size:11px">${pos}</div>
-      <select class="fi prog-song" style="flex:1" onchange="togglePlaceholder(this)"><option value="">– Lied –</option><option value="__placeholder__" ${isPlaceholder?'selected':''}>📌 Platzhalter</option>${opts}</select>
+      <select class="fi prog-song" style="flex:1" onchange="togglePlaceholder(this)">
+        <option value="">– Lied –</option>
+        <option value="__placeholder__" ${selVal==='__placeholder__'?'selected':''}>📌 Platzhalter</option>
+        <option value="__freies_lied__" ${selVal==='__freies_lied__'?'selected':''}>🎵 Freies Lied</option>
+        ${opts}
+      </select>
       <button type="button" class="btn btn-d btn-sm" onclick="this.closest('.prog-ep-row').remove();renumberProgRows()" style="width:28px;height:28px;padding:0">✕</button>
     </div>
-    <div class="prog-placeholder-name" style="${isPlaceholder?'':'display:none'}margin-bottom:5px">
-      <input class="fi" placeholder="Beschreibung (z.B. Eingangslied)" value="${esc(p.placeholder||'')}" style="font-size:12px">
+    <div class="prog-placeholder-name" style="${showPh?'':'display:none;'}margin-bottom:5px">
+      <input class="fi" placeholder="${phLabel}" value="${esc(phVal)}" style="font-size:12px">
     </div>
     <div class="ep-roles">
       <input class="fi prog-dir" placeholder="Dirigent" list="dl-dirigent" autocomplete="off" value="${esc(p.dirigent||'')}">
@@ -261,7 +277,16 @@ function buildProgRow(pos,p={},songs=[]){
 function togglePlaceholder(sel){
   const row=sel.closest('.prog-ep-row');
   const ph=row.querySelector('.prog-placeholder-name');
-  if(sel.value==='__placeholder__'){ph.style.display='';} else {ph.style.display='none';}
+  const inp=ph.querySelector('input');
+  if(sel.value==='__placeholder__'){
+    ph.style.display='';
+    inp.placeholder='Beschreibung (z.B. Eingangslied)';
+  } else if(sel.value==='__freies_lied__'){
+    ph.style.display='';
+    inp.placeholder='Liedtitel eingeben';
+  } else {
+    ph.style.display='none';
+  }
 }
 function renumberProgRows(){document.querySelectorAll('.prog-ep-row .pnum').forEach((el,i)=>el.textContent=i+1);}
 function addProgRow(){const c=document.getElementById('prog-rows');const p=c.querySelectorAll('.prog-ep-row').length+1;const d=document.createElement('div');d.innerHTML=buildProgRow(p,{},window._efSongs||[]);c.appendChild(d.firstElementChild);}
@@ -377,8 +402,9 @@ async function saveEvent(){
       const desc=row.querySelector('.sonst-desc')?.value.trim()||'';
       return{event_id:evId,song_id:null,position:i+1,placeholder:`[Sonstiges] ${name}|${desc}`};
     }
+    const isFreiesLied=songVal==='__freies_lied__';
     const phName=row.querySelector('.prog-placeholder-name input')?.value.trim()||'';
-    return{event_id:evId,song_id:isPlaceholder?null:songVal||null,position:i+1,dirigent:row.querySelector('.prog-dir')?.value.trim()||'',klavier:row.querySelector('.prog-klav')?.value.trim()||'',instrumente:row.querySelector('.prog-instr')?.value.trim()||'',placeholder:isPlaceholder?phName||'Platzhalter':null};
+    return{event_id:evId,song_id:(isPlaceholder||isFreiesLied)?null:songVal||null,position:i+1,dirigent:row.querySelector('.prog-dir')?.value.trim()||'',klavier:row.querySelector('.prog-klav')?.value.trim()||'',instrumente:row.querySelector('.prog-instr')?.value.trim()||'',placeholder:isFreiesLied?`[FreiesLied] ${phName}`:isPlaceholder?phName||'Platzhalter':null};
   }).filter(p=>p.song_id||p.placeholder);
   if(progInsert.length)await SB.from('event_program').insert(progInsert);
   await SB.from('event_tasks').delete().eq('event_id',evId);

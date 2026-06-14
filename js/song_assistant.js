@@ -917,9 +917,10 @@ async function toggleMemberRole(id,role){const nr=role==='admin'?'member':'admin
 async function toggleRole2(id,current){const opts=['','dirigent','klavier','dirigent,klavier'];const labels=['Keine','Dirigent','Klavier','Dirigent & Klavier'];const cur=opts.indexOf(current);const next=(cur+1)%opts.length;await SB.from('profiles').update({role2:opts[next]||null}).eq('id',id);renderSettings('members');T(`Zusatzrolle: ${labels[next]}`,'ok');}
 async function toggleActive(id,isActive){if(!confirm(isActive?'Mitglied deaktivieren?':'Mitglied aktivieren?'))return;await SB.from('profiles').update({active:!isActive}).eq('id',id);renderSettings('members');T(isActive?'Deaktiviert':'Aktiviert','ok');}
 
-let _editMemberId=null;
+let _editMemberId=null,_editMemberOrigEmail=null;
 function openEditMember(m){
   _editMemberId=m.id;
+  _editMemberOrigEmail=m.email||'';
   const parts=(m.name||'').split(' ');
   document.getElementById('em-title').textContent='Bearbeiten: '+(m.name||'');
   document.getElementById('em-vname').value=parts[0]||'';
@@ -949,19 +950,22 @@ async function saveEditMember(){
   // Update profile table
   const{error:pErr}=await SB.from('profiles').update({name,phone,stimme,role2}).eq('id',_editMemberId);
   if(pErr){T('Fehler: '+pErr.message,'err');return;}
-  // Update email/password via Edge Function if provided
-  if(email||pass){
+  // Update email/password via Edge Function only if something changed
+  const emailChanged=email&&email!==_editMemberOrigEmail;
+  if(emailChanged||pass){
     const{data:{session}}=await SB.auth.getSession();
     const token=session?.access_token;
-    const res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body:JSON.stringify({userId:_editMemberId,email:email||undefined,password:pass||undefined})
-    });
+    let res;
+    try{
+      res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({userId:_editMemberId,email:emailChanged?email:undefined,password:pass||undefined})
+      });
+    }catch(e){T('Edge Function nicht erreichbar – bitte im Supabase Dashboard deployen','err');return;}
     const json=await res.json().catch(()=>({}));
-    if(!res.ok){T('Auth-Fehler: '+(json.error||res.status),'err');return;}
-    // Also update email in profiles table
-    if(email)await SB.from('profiles').update({email}).eq('id',_editMemberId);
+    if(!res.ok){T('Auth-Fehler: '+(json.error||res.statusText||res.status),'err');return;}
+    if(emailChanged)await SB.from('profiles').update({email}).eq('id',_editMemberId);
   }
   closeModal('m-edit-member');
   renderSettings('members');

@@ -947,26 +947,25 @@ async function saveEditMember(){
   const pass2=document.getElementById('em-pass2').value;
   if(pass&&pass!==pass2){T('Passwörter stimmen nicht überein','err');return;}
   if(pass&&pass.length<6){T('Passwort min. 6 Zeichen','err');return;}
-  // Update profile table
-  const{error:pErr}=await SB.from('profiles').update({name,phone,stimme,role2}).eq('id',_editMemberId);
-  if(pErr){T('Fehler: '+pErr.message,'err');return;}
-  // Update email/password via Edge Function only if something changed
   const emailChanged=email&&email!==_editMemberOrigEmail;
-  if(emailChanged||pass){
-    const{data:{session}}=await SB.auth.getSession();
-    const token=session?.access_token;
-    let res;
-    try{
-      res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-        body:JSON.stringify({userId:_editMemberId,email:emailChanged?email:undefined,password:pass||undefined})
-      });
-    }catch(e){T('Edge Function nicht erreichbar – bitte im Supabase Dashboard deployen','err');return;}
-    const json=await res.json().catch(()=>({}));
-    if(!res.ok){T('Auth-Fehler: '+(json.error||res.statusText||res.status),'err');return;}
-    if(emailChanged)await SB.from('profiles').update({email}).eq('id',_editMemberId);
-  }
+  const{data:{session}}=await SB.auth.getSession();
+  const token=session?.access_token;
+  // Alles über die Edge Function (Service Role umgeht RLS)
+  let res;
+  try{
+    res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body:JSON.stringify({
+        userId:_editMemberId,
+        profile:{name,phone,stimme,role2,email:emailChanged?email:undefined},
+        email:emailChanged?email:undefined,
+        password:pass||undefined
+      })
+    });
+  }catch(e){T('Edge Function nicht erreichbar – bitte im Supabase Dashboard deployen','err');return;}
+  const json=await res.json().catch(()=>({}));
+  if(!res.ok){T('Fehler: '+(json.error||res.statusText||res.status),'err');return;}
   closeModal('m-edit-member');
   renderSettings('members');
   T('Gespeichert','ok');

@@ -21,10 +21,22 @@ function startApp(){
   showPage('dashboard');
 }
 
+// ========== SCROLL UX ==========
+document.getElementById('content').addEventListener('scroll',function(){
+  const scrollBtn=document.getElementById('scroll-top-btn');
+  const alphaIdx=document.getElementById('song-alpha-index');
+  const onSongs=document.getElementById('page-songs')?.classList.contains('active');
+  if(scrollBtn)scrollBtn.classList.toggle('visible',this.scrollTop>200);
+  if(alphaIdx)alphaIdx.classList.toggle('visible',onSongs&&alphaIdx.children.length>0&&this.scrollTop>50);
+});
+
 function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name)?.classList.add('active');
+  // Hide alpha index when leaving songs page
+  const alphaIdx=document.getElementById('song-alpha-index');
+  if(alphaIdx&&name!=='songs')alphaIdx.classList.remove('visible');
   const pages=['dashboard','songs','events','cal','stats','media','settings'];
   const navItems=document.querySelectorAll('.ni');
   const idx=pages.indexOf(name);

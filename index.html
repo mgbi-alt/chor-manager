@@ -81,7 +81,10 @@
         <span style="margin-left:auto;font-size:11px;color:var(--text3)" id="filter-toggle-label">anzeigen</span>
       </div>
       <div class="frow" id="song-filters"></div>
-      <div id="song-list"></div>
+      <div style="position:relative">
+        <div id="song-list" style="padding-right:20px"></div>
+        <div id="song-alpha-index"></div>
+      </div>
     </div>
     <!-- VERANSTALTUNGEN -->
     <div class="page" id="page-events">
@@ -374,6 +377,7 @@
   </div>
 </div></div>
 
+<button id="scroll-top-btn" onclick="document.getElementById('content').scrollTo({top:0,behavior:'smooth'})" title="Nach oben">↑</button>
 <div class="toast" id="toast"></div>
 <datalist id="dl-dirigent"></datalist>
 <datalist id="dl-klavier"></datalist>

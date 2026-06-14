@@ -99,8 +99,20 @@ function displaySongs(songs){
   const countEl=document.getElementById('song-count');
   const repCount=cachedSongs.filter(s=>s.in_repertoire!==false).length;
   if(countEl)countEl.textContent=songs.length+' / '+repCount+(showAllSources?' (inkl. Datenbank)':'');
-  if(!songs.length){el.innerHTML='<div class="empty"><p>Keine Lieder gefunden</p></div>';return;}
-  el.innerHTML=songs.map(s=>{
+  if(!songs.length){el.innerHTML='<div class="empty"><p>Keine Lieder gefunden</p></div>';_updateAlphaIndex([]);return;}
+  // Group by first letter
+  const groups=new Map();
+  songs.forEach(s=>{
+    const raw=(s.liedanfang||s.title||'#').trim();
+    let ltr=raw.charAt(0).toUpperCase();
+    if(!/[A-ZÄÖÜ]/.test(ltr))ltr='#';
+    if(!groups.has(ltr))groups.set(ltr,[]);
+    groups.get(ltr).push(s);
+  });
+  let html='';
+  groups.forEach((list,ltr)=>{
+    html+=`<div class="song-section-hdr" id="song-sec-${ltr}">${ltr}</div>`;
+    html+=list.map(s=>{
     const fixTitle=t=>{if(!t)return t;const u=t.replace(/[ÄÖÜäöüA-Z]/g,'');return(t===t.toUpperCase()||t.replace(/\s/g,'')===t.replace(/\s/g,'').toUpperCase())?t.charAt(0).toUpperCase()+t.slice(1).toLowerCase():t;};
     const haupttext=s.liedanfang?`${esc(s.liedanfang)}${s.title&&s.title!==s.liedanfang?` <span style="color:var(--text3)">|</span> ${esc(fixTitle(s.title))}`:''}`:esc(fixTitle(s.title));
     const themen=(s.thema||'').split(',').map(t=>t.trim()).filter(Boolean);
@@ -124,7 +136,23 @@ function displaySongs(songs){
         </div>
       </div>
     </div>`;
-  }).join('');
+    }).join('');
+  });
+  el.innerHTML=html;
+  _updateAlphaIndex([...groups.keys()]);
+}
+function _updateAlphaIndex(presentLetters){
+  const idx=document.getElementById('song-alpha-index');
+  if(!idx)return;
+  const all='ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ#'.split('');
+  const present=new Set(presentLetters);
+  if(!present.size){idx.classList.remove('visible');return;}
+  idx.innerHTML=all.map(l=>`<span class="alpha-ltr${present.has(l)?'':' dim'}" onclick="_scrollToLetter('${l}')">${l==='#'?'#':l}</span>`).join('');
+  idx.classList.add('visible');
+}
+function _scrollToLetter(ltr){
+  const sec=document.getElementById('song-sec-'+ltr);
+  if(sec)sec.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 async function openSongDetail(id){

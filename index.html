@@ -279,6 +279,39 @@
 </div></div>
 
 <!-- Add Member -->
+<!-- Edit Member Modal -->
+<div class="mo" id="m-edit-member"><div class="md">
+  <div class="mhandle"></div>
+  <div class="mh"><h3 id="em-title">Mitglied bearbeiten</h3><button class="mclose" onclick="closeModal('m-edit-member')">×</button></div>
+  <div class="mb">
+    <div class="fst">Persönliche Daten</div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Vorname</label><input class="fi" id="em-vname"></div>
+      <div class="fg"><label class="fl">Nachname</label><input class="fi" id="em-nname"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Telefon</label><input class="fi" id="em-phone" type="tel"></div>
+      <div class="fg"><label class="fl">Stimme</label>
+        <select class="fi" id="em-stimme"><option value="">–</option><option>Sopran</option><option>Alt</option><option>Tenor</option><option>Bass</option></select>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Zusatzrolle</label>
+      <select class="fi" id="em-role2"><option value="">Keine</option><option value="dirigent">Dirigent</option><option value="klavier">Klavier</option><option value="dirigent,klavier">Dirigent & Klavier</option></select>
+    </div>
+    <div class="fst" style="margin-top:14px">Konto (nur bei Änderung ausfüllen)</div>
+    <div class="fg"><label class="fl">Neue E-Mail-Adresse</label><input class="fi" id="em-email" type="email" placeholder="Leer lassen = nicht ändern"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Neues Passwort</label><input class="fi" id="em-pass" type="password" placeholder="Leer lassen = nicht ändern"></div>
+      <div class="fg"><label class="fl">Bestätigen</label><input class="fi" id="em-pass2" type="password" placeholder="Wiederholen"></div>
+    </div>
+    <div id="em-hint" style="font-size:11px;color:var(--text3);margin-top:6px">E-Mail und Passwort werden über die Admin-API geändert.</div>
+  </div>
+  <div class="mf">
+    <button class="btn btn-g" onclick="closeModal('m-edit-member')" style="flex:1">Abbrechen</button>
+    <button class="btn btn-p" onclick="saveEditMember()" style="flex:2">Speichern</button>
+  </div>
+</div></div>
+
 <div class="mo" id="m-add-member"><div class="md">
   <div class="mhandle"></div>
   <div class="mh"><h3>Mitglied hinzufügen</h3><button class="mclose" onclick="closeModal('m-add-member')">×</button></div>

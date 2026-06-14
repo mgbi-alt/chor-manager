@@ -883,8 +883,8 @@ async function renderSettings(tab='members'){
           </div>
         </div>
         <div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">
+          <button class="btn btn-g btn-sm" onclick="openEditMember(${JSON.stringify(m).replace(/"/g,'&quot;')})">✏️ Bearbeiten</button>
           ${!isMe?`<button class="btn btn-g btn-sm" onclick="toggleMemberRole('${m.id}','${m.role}')">${m.role==='admin'?'Zu Mitglied':'Zu Admin'}</button>`:''}
-          <button class="btn btn-g btn-sm" onclick="toggleRole2('${m.id}','${m.role2||''}')">Zusatzrolle</button>
           ${!isMe?`<button class="btn ${isActive?'btn-d':'btn-i'} btn-sm" onclick="toggleActive('${m.id}',${isActive})">${isActive?'Deaktivieren':'Aktivieren'}</button>`:''}
         </div>
       </div>`;}).join('')}`;
@@ -916,6 +916,57 @@ async function deleteCat(id){if(!confirm('Kategorie löschen?'))return;await SB.
 async function toggleMemberRole(id,role){const nr=role==='admin'?'member':'admin';if(!confirm(`Rolle zu "${nr==='admin'?'Admin':'Mitglied'}" wechseln?`))return;await SB.from('profiles').update({role:nr}).eq('id',id);renderSettings('members');T('Rolle geändert','ok');}
 async function toggleRole2(id,current){const opts=['','dirigent','klavier','dirigent,klavier'];const labels=['Keine','Dirigent','Klavier','Dirigent & Klavier'];const cur=opts.indexOf(current);const next=(cur+1)%opts.length;await SB.from('profiles').update({role2:opts[next]||null}).eq('id',id);renderSettings('members');T(`Zusatzrolle: ${labels[next]}`,'ok');}
 async function toggleActive(id,isActive){if(!confirm(isActive?'Mitglied deaktivieren?':'Mitglied aktivieren?'))return;await SB.from('profiles').update({active:!isActive}).eq('id',id);renderSettings('members');T(isActive?'Deaktiviert':'Aktiviert','ok');}
+
+let _editMemberId=null;
+function openEditMember(m){
+  _editMemberId=m.id;
+  const parts=(m.name||'').split(' ');
+  document.getElementById('em-title').textContent='Bearbeiten: '+(m.name||'');
+  document.getElementById('em-vname').value=parts[0]||'';
+  document.getElementById('em-nname').value=parts.slice(1).join(' ')||'';
+  document.getElementById('em-phone').value=m.phone||'';
+  document.getElementById('em-stimme').value=m.stimme||'';
+  document.getElementById('em-role2').value=m.role2||'';
+  document.getElementById('em-email').value='';
+  document.getElementById('em-pass').value='';
+  document.getElementById('em-pass2').value='';
+  document.getElementById('em-hint').style.display='';
+  openModal('m-edit-member');
+}
+async function saveEditMember(){
+  if(!_editMemberId)return;
+  const vname=document.getElementById('em-vname').value.trim();
+  const nname=document.getElementById('em-nname').value.trim();
+  const name=(vname+' '+nname).trim();
+  const phone=document.getElementById('em-phone').value.trim();
+  const stimme=document.getElementById('em-stimme').value;
+  const role2=document.getElementById('em-role2').value||null;
+  const email=document.getElementById('em-email').value.trim();
+  const pass=document.getElementById('em-pass').value;
+  const pass2=document.getElementById('em-pass2').value;
+  if(pass&&pass!==pass2){T('Passwörter stimmen nicht überein','err');return;}
+  if(pass&&pass.length<6){T('Passwort min. 6 Zeichen','err');return;}
+  // Update profile table
+  const{error:pErr}=await SB.from('profiles').update({name,phone,stimme,role2}).eq('id',_editMemberId);
+  if(pErr){T('Fehler: '+pErr.message,'err');return;}
+  // Update email/password via Edge Function if provided
+  if(email||pass){
+    const{data:{session}}=await SB.auth.getSession();
+    const token=session?.access_token;
+    const res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body:JSON.stringify({userId:_editMemberId,email:email||undefined,password:pass||undefined})
+    });
+    const json=await res.json().catch(()=>({}));
+    if(!res.ok){T('Auth-Fehler: '+(json.error||res.status),'err');return;}
+    // Also update email in profiles table
+    if(email)await SB.from('profiles').update({email}).eq('id',_editMemberId);
+  }
+  closeModal('m-edit-member');
+  renderSettings('members');
+  T('Gespeichert','ok');
+}
 
 async function openAddMember(){['am-vname','am-nname','am-email','am-pass','am-phone'].forEach(id=>document.getElementById(id).value='');document.getElementById('am-stimme').value='';document.getElementById('am-role2').value='';openModal('m-add-member');}
 async function addMember(){

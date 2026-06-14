@@ -1,4 +1,4 @@
-const CACHE = 'chormanager-v14';
+const CACHE = 'chormanager-v15';
 
 // ===== INSTALL =====
 self.addEventListener('install', e => {

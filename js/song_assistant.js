@@ -927,7 +927,7 @@ function openEditMember(m){
   document.getElementById('em-phone').value=m.phone||'';
   document.getElementById('em-stimme').value=m.stimme||'';
   document.getElementById('em-role2').value=m.role2||'';
-  document.getElementById('em-email').value='';
+  document.getElementById('em-email').value=m.email||'';
   document.getElementById('em-pass').value='';
   document.getElementById('em-pass2').value='';
   document.getElementById('em-hint').style.display='';

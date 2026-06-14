@@ -45,7 +45,7 @@ function getNRWSchoolHolidays(year){
   } else if(year===2026){
     h.push({from:'2026-01-01',to:'2026-01-05',name:'🎄 Weihnachtsferien'});
     h.push({from:'2026-03-30',to:'2026-04-11',name:'🐣 Osterferien'});
-    h.push({from:'2026-06-22',to:'2026-08-04',name:'☀️ Sommerferien'});
+    h.push({from:'2026-07-20',to:'2026-09-01',name:'☀️ Sommerferien'});
     h.push({from:'2026-10-05',to:'2026-10-17',name:'🍂 Herbstferien'});
     h.push({from:'2026-12-23',to:'2027-01-06',name:'🎄 Weihnachtsferien'});
   }

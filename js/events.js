@@ -114,7 +114,7 @@ function evCard(e){
 async function openEvDetail(id){
   const{data:e}=await SB.from('events').select('*,event_program(id,position,song_id,dirigent,klavier,instrumente,placeholder,songs(title,liedanfang,besetzung)),event_tasks(*),attendance(member_id,status,profiles(name,stimme))').eq('id',id).single();
   if(!e)return;
-  const isAdmin=currentProfile?.role==='admin';
+  const isAdmin=can('events_edit');
   const prog=(e.event_program||[]).sort((a,b)=>a.position-b.position);
   document.getElementById('ed-title').textContent=e.title;
   document.getElementById('ed-body').innerHTML=`

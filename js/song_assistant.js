@@ -870,6 +870,9 @@ async function renderSettings(tab='members'){
       <button class="btn btn-p btn-sm" onclick="openAddMember()">+ Mitglied</button>
     </div>
     ${(members||[]).map(m=>{const isMe=m.id===currentUser.id;const isActive=m.active!==false;
+      const mPerms=(m.role2||'').split(',').map(s=>s.trim());
+      const mMusRole=mPerms.filter(p=>['dirigent','klavier'].includes(p)).map(r=>r==='dirigent'?'Dirigent':'Klavier').join(' & ');
+      const mPermBadges=[mPerms.includes('songs_edit')?'<span class="badge green" style="font-size:9px">Lieder</span>':'',mPerms.includes('events_edit')?'<span class="badge blue" style="font-size:9px">Veranstaltungen</span>':''].filter(Boolean).join('');
       return`<div class="card" style="cursor:default;${!isActive?'opacity:.5':''}">
         <div class="crow">
           <div><div style="font-weight:500">${esc(m.name)}</div>
@@ -878,7 +881,8 @@ async function renderSettings(tab='members'){
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
             <span class="badge ${m.role==='admin'?'warn':''}">${m.role==='admin'?'Admin':'Mitglied'}</span>
-            ${m.role2?`<span class="badge blue">${esc(m.role2.split(',').map(r=>r==='dirigent'?'Dirigent':'Klavier').join(' & '))}</span>`:''}
+            ${mMusRole?`<span class="badge gray" style="font-size:9px">${esc(mMusRole)}</span>`:''}
+            ${mPermBadges}
             ${!isActive?'<span class="badge red">Deaktiviert</span>':''}
           </div>
         </div>
@@ -927,7 +931,11 @@ function openEditMember(m){
   document.getElementById('em-nname').value=parts.slice(1).join(' ')||'';
   document.getElementById('em-phone').value=m.phone||'';
   document.getElementById('em-stimme').value=m.stimme||'';
-  document.getElementById('em-role2').value=m.role2||'';
+  const perms=(m.role2||'').split(',').map(s=>s.trim());
+  const musRole=perms.filter(p=>['dirigent','klavier'].includes(p)).join(',');
+  document.getElementById('em-role2').value=musRole;
+  document.getElementById('em-perm-songs').checked=perms.includes('songs_edit');
+  document.getElementById('em-perm-events').checked=perms.includes('events_edit');
   document.getElementById('em-email').value=m.email||'';
   document.getElementById('em-pass').value='';
   document.getElementById('em-pass2').value='';
@@ -941,7 +949,11 @@ async function saveEditMember(){
   const name=(vname+' '+nname).trim();
   const phone=document.getElementById('em-phone').value.trim();
   const stimme=document.getElementById('em-stimme').value;
-  const role2=document.getElementById('em-role2').value||null;
+  const musRole=document.getElementById('em-role2').value;
+  const permParts=[...musRole?musRole.split(','):[]];
+  if(document.getElementById('em-perm-songs').checked)permParts.push('songs_edit');
+  if(document.getElementById('em-perm-events').checked)permParts.push('events_edit');
+  const role2=permParts.join(',')||null;
   const email=document.getElementById('em-email').value.trim();
   const pass=document.getElementById('em-pass').value;
   const pass2=document.getElementById('em-pass2').value;

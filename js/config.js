@@ -19,6 +19,13 @@ function today(){return new Date().toISOString().slice(0,10);}
 function initials(name){const p=(name||'').split(' ');return((p[0]?.charAt(0)||'')+(p[1]?.charAt(0)||p[0]?.charAt(1)||'')).toUpperCase();}
 function firstName(name){return(name||'').split(' ')[0]||name||'';}
 
+// ========== PERMISSION HELPER ==========
+function can(permission){
+  if(!currentProfile)return false;
+  if(currentProfile.role==='admin')return true;
+  return(currentProfile.role2||'').split(',').map(s=>s.trim()).includes(permission);
+}
+
 // ========== NRW HOLIDAYS ==========
 function getNRWHolidays(year){
   // Fixed holidays

@@ -295,8 +295,14 @@
         <select class="fi" id="em-stimme"><option value="">–</option><option>Sopran</option><option>Alt</option><option>Tenor</option><option>Bass</option></select>
       </div>
     </div>
-    <div class="fg"><label class="fl">Zusatzrolle</label>
+    <div class="fg"><label class="fl">Musikalische Rolle</label>
       <select class="fi" id="em-role2"><option value="">Keine</option><option value="dirigent">Dirigent</option><option value="klavier">Klavier</option><option value="dirigent,klavier">Dirigent & Klavier</option></select>
+    </div>
+    <div class="fg" style="margin-top:4px"><label class="fl">Berechtigungen</label>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="em-perm-songs" style="width:16px;height:16px;accent-color:var(--accent)"> Lieder hinzufügen & bearbeiten</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="em-perm-events" style="width:16px;height:16px;accent-color:var(--accent)"> Veranstaltungen hinzufügen & bearbeiten</label>
+      </div>
     </div>
     <div class="fst" style="margin-top:14px">Konto (nur bei Änderung ausfüllen)</div>
     <div class="fg"><label class="fl">Neue E-Mail-Adresse</label><input class="fi" id="em-email" type="email" placeholder="Leer lassen = nicht ändern"></div>

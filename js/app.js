@@ -8,10 +8,10 @@ function startApp(){
   document.getElementById('tb-name').textContent=p.name||'';
   document.getElementById('tb-av').textContent=initials(p.name)||'?';
   const isAdmin=p.role==='admin';
-  if(isAdmin){
-    document.getElementById('ni-settings').style.display='flex';
-    ['song-add-btn','song-ai-btn','ev-add-btn','ev-chat-btn','ev-export-btn','ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
-  }
+  if(isAdmin)document.getElementById('ni-settings').style.display='flex';
+  if(can('songs_edit'))['song-add-btn','song-ai-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+  if(can('events_edit'))['ev-add-btn','ev-chat-btn','ev-export-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+  if(isAdmin)['ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
   SB.channel('rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>{loadUnread();if(document.getElementById('page-ann').classList.contains('active'))renderAnn();}).subscribe();
   // Track last seen
   SB.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',currentUser.id).then(()=>{});

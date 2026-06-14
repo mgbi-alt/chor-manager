@@ -158,7 +158,7 @@ function _scrollToLetter(ltr){
 async function openSongDetail(id){
   const s=cachedSongs.find(x=>x.id===id)||{};
   document.getElementById('sd-title').textContent=s.title||'Lied';
-  const isAdmin=currentProfile?.role==='admin';
+  const isAdmin=can('songs_edit');
   function df(label,val,opts){
     if(!val)return`<div class="df"><div class="dl">${label}</div><div class="dv" style="color:var(--text3)">–</div></div>`;
     return`<div class="df ${opts==='full'?'style="grid-column:1/-1"':''}"><div class="dl">${label}</div><div class="dv">${opts==='badge'?`<span class="badge">${esc(val)}</span>`:esc(val)}</div></div>`;

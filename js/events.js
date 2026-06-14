@@ -223,6 +223,7 @@ async function openEventForm(id=null){
         <button type="button" class="btn btn-g btn-sm" onclick="addProgRow()">+ Lied</button>
         <button type="button" class="btn btn-g btn-sm" onclick="addPredigtRow()">+ Predigt</button>
         <button type="button" class="btn btn-g btn-sm" onclick="addSonstigesRow()">+ Sonstiges</button>
+        <button type="button" class="btn btn-g btn-sm" onclick="loadProgTemplate()" style="border-color:var(--accent);color:var(--accent2)">📋 Vorlage</button>
       </div>
     </div>
     <div class="fs"><div class="fst">Aufgaben</div>
@@ -328,6 +329,21 @@ function addPredigtRow(){
   const d=document.createElement('div');
   d.innerHTML=buildPredigtRow(pos);
   c.appendChild(d.firstElementChild);
+}
+function loadProgTemplate(){
+  const c=document.getElementById('prog-rows');
+  if(c.querySelectorAll('.prog-ep-row').length>0&&!confirm('Vorhandenes Programm ersetzen?'))return;
+  c.innerHTML='';
+  const template=[
+    ()=>buildProgRow(1,{song_id:null,placeholder:'Platzhalter'},window._efSongs||[]),
+    ()=>buildProgRow(2,{song_id:null,placeholder:'Platzhalter'},window._efSongs||[]),
+    ()=>buildPredigtRow(3),
+    ()=>buildProgRow(4,{song_id:null,placeholder:'Platzhalter'},window._efSongs||[]),
+    ()=>buildPredigtRow(5),
+    ()=>buildProgRow(6,{song_id:null,placeholder:'Platzhalter'},window._efSongs||[]),
+  ];
+  template.forEach(fn=>{const d=document.createElement('div');d.innerHTML=fn();c.appendChild(d.firstElementChild);});
+  renumberProgRows();
 }
 function addSonstigesRow(){
   const c=document.getElementById('prog-rows');

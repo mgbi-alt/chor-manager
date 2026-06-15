@@ -116,6 +116,13 @@ async function openEvDetail(id){
   if(!e)return;
   const isAdmin=can('events_edit');
   const prog=(e.event_program||[]).sort((a,b)=>a.position-b.position);
+  // Fetch PDFs for songs in this program
+  const songIds=prog.map(p=>p.song_id).filter(Boolean);
+  let progFileMap=new Map();
+  if(songIds.length){
+    const{data:files}=await SB.from('song_files').select('song_id,file_type,url').in('song_id',songIds).in('file_type',['chorsatz','klaviersatz','chor_klavier','orchestersatz']);
+    (files||[]).forEach(f=>{if(!progFileMap.has(f.song_id))progFileMap.set(f.song_id,[]);progFileMap.get(f.song_id).push(f);});
+  }
   document.getElementById('ed-title').textContent=e.title;
   document.getElementById('ed-body').innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;font-size:13px">
@@ -140,7 +147,10 @@ async function openEvDetail(id){
       }
       const la=p.songs?.liedanfang,ti=p.songs?.title;
       const songLabel=p.placeholder?`<span style="color:var(--text3)">? ${esc(p.placeholder)}</span>`:(la?(ti&&ti!==la?`${esc(la)} <span style="color:var(--text3)">|</span> ${esc(ti)}`:esc(la)):esc(ti||'?'));
-      return`<div class="pitem"><div style="display:flex;align-items:center;gap:9px"><div class="pnum">${p.position}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">${songLabel}</div><div style="font-size:11px;color:var(--text2)">${p.placeholder?'Platzhalter':esc(p.songs?.besetzung||'')}</div></div></div>${(p.dirigent||p.klavier||p.instrumente)?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border)">${p.dirigent?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Dirigent</span><span>${esc(p.dirigent)}</span></div>`:''}${p.klavier?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Klavier</span><span>${esc(p.klavier)}</span></div>`:''}${p.instrumente?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Instrumente</span><span>${esc(p.instrumente)}</span></div>`:''}</div>`:''}</div>`;
+      const pdfFiles=p.song_id?progFileMap.get(p.song_id)||[]:[];
+      const FILE_ICONS={chorsatz:'📄',klaviersatz:'🎹',chor_klavier:'📄🎹',orchestersatz:'🎻'};
+      const pdfLinks=pdfFiles.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:15px;text-decoration:none;opacity:.85" title="${f.file_type}">${FILE_ICONS[f.file_type]||'📄'}</a>`).join('');
+      return`<div class="pitem"><div style="display:flex;align-items:center;gap:9px"><div class="pnum">${p.position}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">🎵 ${songLabel}${pdfLinks?` <span style="margin-left:4px">${pdfLinks}</span>`:''}</div><div style="font-size:11px;color:var(--text2)">${p.placeholder?'Platzhalter':esc(p.songs?.besetzung||'')}</div></div></div>${(p.dirigent||p.klavier||p.instrumente)?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border)">${p.dirigent?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Dirigent</span><span>${esc(p.dirigent)}</span></div>`:''}${p.klavier?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Klavier</span><span>${esc(p.klavier)}</span></div>`:''}${p.instrumente?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Instrumente</span><span>${esc(p.instrumente)}</span></div>`:''}</div>`:''}</div>`;
     }).join(''):'<p style="color:var(--text3);font-size:12px">Kein Programm</p>'}
     ${(()=>{const rows=[['Thema',e.thema],...(e.event_tasks||[]).map(t=>[t.aufgabe,t.person])].filter(([,v])=>v);return rows.length?`<div class="ddiv" style="margin:8px 0"></div><div style="background:var(--card);border-radius:var(--r);border:0.5px solid var(--border)">${rows.map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 10px;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text2)">${esc(l)}</span><span>${esc(v)}</span></div>`).join('')}</div>`:''})()}
     ${isAdmin?(()=>{

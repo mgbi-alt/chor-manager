@@ -122,6 +122,7 @@ async function openEvDetail(id){
       <span style="color:var(--text2)">📅</span> <span>${fD(e.datum)}${e.uhrzeit?' · '+fT(e.uhrzeit):''}</span>
       ${e.ort?`<span style="color:var(--text3)">·</span><span>📍 ${esc(e.ort)}</span>`:''}
       ${e.chor?`<span style="color:var(--text3)">·</span><span>🎵 ${esc(e.chor)}</span>`:''}
+      ${e.dirigent?`<span style="color:var(--text3)">·</span><span>👤 ${esc(e.dirigent)}</span>`:''}
     </div>
     ${prog.length?`<div class="dl" style="margin-bottom:5px">Programm</div>`:''}
     ${prog.length?prog.map(p=>{

@@ -1,3 +1,64 @@
+// ========== PASSWORT VERGESSEN ==========
+let _pwEmail='';
+function pwStep(n){
+  [0,1,2,3].forEach(i=>document.getElementById('ls-pw'+i)?.style.setProperty('display',i===n?'':'none'));
+  document.getElementById('ls-login').style.display=n===0?'':'none';
+  if(n===1){document.getElementById('pw-email').value=document.getElementById('l-email').value||'';document.getElementById('pw-err1').style.display='none';}
+  if(n===2){document.getElementById('pw-code').value='';document.getElementById('pw-err2').style.display='none';}
+  if(n===3){document.getElementById('pw-new').value='';document.getElementById('pw-new2').value='';document.getElementById('pw-err3').style.display='none';document.getElementById('pw-strength').innerHTML='';}
+}
+async function pwSendCode(){
+  const email=document.getElementById('pw-email').value.trim();
+  const err=document.getElementById('pw-err1');
+  err.style.display='none';
+  if(!email){err.textContent='Bitte E-Mail eingeben.';err.style.display='block';return;}
+  const{error}=await SB.auth.signInWithOtp({email,options:{shouldCreateUser:false}});
+  if(error){err.textContent=error.message;err.style.display='block';return;}
+  _pwEmail=email;
+  document.getElementById('pw-email-display').textContent=email;
+  pwStep(2);
+}
+async function pwVerifyCode(){
+  const token=document.getElementById('pw-code').value.trim();
+  const err=document.getElementById('pw-err2');
+  err.style.display='none';
+  if(token.length!==6){err.textContent='Bitte 6-stelligen Code eingeben.';err.style.display='block';return;}
+  const{error}=await SB.auth.verifyOtp({email:_pwEmail,token,type:'email'});
+  if(error){err.textContent='Ungültiger oder abgelaufener Code.';err.style.display='block';return;}
+  pwStep(3);
+}
+function pwValidate(pw){
+  return[
+    {ok:/[A-Z]/.test(pw),label:'Großbuchstabe'},
+    {ok:/[a-z]/.test(pw),label:'Kleinbuchstabe'},
+    {ok:/[0-9]/.test(pw),label:'Ziffer'},
+    {ok:/[^A-Za-z0-9]/.test(pw),label:'Sonderzeichen'},
+    {ok:pw.length>=8,label:'Min. 8 Zeichen'},
+  ];
+}
+function pwCheckStrength(){
+  const pw=document.getElementById('pw-new').value;
+  const rules=pwValidate(pw);
+  document.getElementById('pw-strength').innerHTML=rules.map(r=>`<span style="color:${r.ok?'var(--success)':'var(--text3)'}">${r.ok?'✓':'○'} ${r.label}</span>`).join('');
+}
+async function pwSetNew(){
+  const pw=document.getElementById('pw-new').value;
+  const pw2=document.getElementById('pw-new2').value;
+  const err=document.getElementById('pw-err3');
+  err.style.display='none';
+  const rules=pwValidate(pw);
+  const failed=rules.filter(r=>!r.ok);
+  if(failed.length){err.textContent='Passwort erfüllt nicht: '+failed.map(r=>r.label).join(', ');err.style.display='block';return;}
+  if(pw!==pw2){err.textContent='Passwörter stimmen nicht überein.';err.style.display='block';return;}
+  const{error}=await SB.auth.updateUser({password:pw});
+  if(error){err.textContent=error.message;err.style.display='block';return;}
+  await SB.auth.signOut();
+  pwStep(0);
+  const lerr=document.getElementById('l-err');
+  lerr.style.color='var(--success)';lerr.textContent='✓ Passwort gesetzt – bitte neu anmelden.';lerr.style.display='block';
+  setTimeout(()=>{lerr.style.display='none';lerr.style.color='';},5000);
+}
+
 // ========== APP START ==========
 document.getElementById('app-version').textContent='v'+APP_VERSION;
 

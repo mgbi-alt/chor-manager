@@ -23,12 +23,48 @@
 <div id="login-screen">
   <div class="login-logo">♪ Chor Manager</div>
   <div class="login-sub">Lied- und Veranstaltungsverwaltung</div>
-  <div class="login-card">
+
+  <!-- Schritt 0: Anmelden -->
+  <div class="login-card" id="ls-login">
     <h2>Anmelden</h2>
-    <div class="fg"><label class="fl">E-Mail</label><input class="fi" id="l-email" type="email" placeholder="name@chor.de"></div>
-    <div class="fg"><label class="fl">Passwort</label><input class="fi" id="l-pass" type="password" placeholder="Passwort"></div>
+    <div class="fg"><label class="fl">E-Mail</label><input class="fi" id="l-email" type="email" placeholder="name@chor.de" autocomplete="email"></div>
+    <div class="fg"><label class="fl">Passwort</label><input class="fi" id="l-pass" type="password" placeholder="Passwort" autocomplete="current-password"></div>
     <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="doLogin()">Anmelden</button>
     <div class="lerr" id="l-err"></div>
+    <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="pwStep(1)">Passwort vergessen?</button>
+  </div>
+
+  <!-- Schritt 1: E-Mail eingeben -->
+  <div class="login-card" id="ls-pw1" style="display:none">
+    <h2>Passwort zurücksetzen</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Gib deine E-Mail-Adresse ein. Du erhältst einen 6-stelligen Code.</p>
+    <div class="fg"><label class="fl">E-Mail</label><input class="fi" id="pw-email" type="email" placeholder="name@chor.de" autocomplete="email"></div>
+    <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="pwSendCode()">Code senden</button>
+    <div class="lerr" id="pw-err1"></div>
+    <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="pwStep(0)">← Zurück zur Anmeldung</button>
+  </div>
+
+  <!-- Schritt 2: Code eingeben -->
+  <div class="login-card" id="ls-pw2" style="display:none">
+    <h2>Code eingeben</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Wir haben einen 6-stelligen Code an <strong id="pw-email-display"></strong> gesendet.</p>
+    <div class="fg"><label class="fl">Bestätigungscode</label><input class="fi" id="pw-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" style="letter-spacing:.2em;font-size:20px;text-align:center"></div>
+    <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="pwVerifyCode()">Weiter</button>
+    <div class="lerr" id="pw-err2"></div>
+    <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="pwStep(1)">← Neuen Code anfordern</button>
+  </div>
+
+  <!-- Schritt 3: Neues Passwort -->
+  <div class="login-card" id="ls-pw3" style="display:none">
+    <h2>Neues Passwort</h2>
+    <div class="fg">
+      <label class="fl">Neues Passwort</label>
+      <input class="fi" id="pw-new" type="password" placeholder="Mind. 8 Zeichen" autocomplete="new-password" oninput="pwCheckStrength()">
+      <div id="pw-strength" style="margin-top:6px;font-size:11px;display:flex;flex-direction:column;gap:3px"></div>
+    </div>
+    <div class="fg"><label class="fl">Passwort bestätigen</label><input class="fi" id="pw-new2" type="password" placeholder="Wiederholen" autocomplete="new-password"></div>
+    <button class="btn btn-p" style="width:100%;margin-top:4px" onclick="pwSetNew()">Passwort setzen</button>
+    <div class="lerr" id="pw-err3"></div>
   </div>
 </div>
 

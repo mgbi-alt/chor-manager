@@ -118,13 +118,12 @@ async function openEvDetail(id){
   const prog=(e.event_program||[]).sort((a,b)=>a.position-b.position);
   document.getElementById('ed-title').textContent=e.title;
   document.getElementById('ed-body').innerHTML=`
-    <div class="dgrid" style="margin-bottom:12px">
-      <div class="df"><div class="dl">Datum</div><div class="dv">${fD(e.datum)}</div></div>
-      <div class="df"><div class="dl">Uhrzeit</div><div class="dv">${fT(e.uhrzeit)||'–'}</div></div>
-      <div class="df" style="grid-column:1/-1"><div class="dl">Ort</div><div class="dv">${esc(e.ort||'–')}</div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;font-size:13px">
+      <span style="color:var(--text2)">📅</span> <span>${fD(e.datum)}${e.uhrzeit?' · '+fT(e.uhrzeit):''}</span>
+      ${e.ort?`<span style="color:var(--text3)">·</span><span>📍 ${esc(e.ort)}</span>`:''}
+      ${e.chor?`<span style="color:var(--text3)">·</span><span>🎵 ${esc(e.chor)}</span>`:''}
     </div>
-    <div class="ddiv"></div>
-    <div class="dl" style="margin-bottom:7px">Programm</div>
+    ${prog.length?`<div class="dl" style="margin-bottom:5px">Programm</div>`:''}
     ${prog.length?prog.map(p=>{
       if(p.placeholder?.startsWith('[FreiesLied] ')){
         const titel=p.placeholder.slice('[FreiesLied] '.length);
@@ -142,28 +141,28 @@ async function openEvDetail(id){
       const songLabel=p.placeholder?`<span style="color:var(--text3)">? ${esc(p.placeholder)}</span>`:(la?(ti&&ti!==la?`${esc(la)} <span style="color:var(--text3)">|</span> ${esc(ti)}`:esc(la)):esc(ti||'?'));
       return`<div class="pitem"><div style="display:flex;align-items:center;gap:9px"><div class="pnum">${p.position}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">${songLabel}</div><div style="font-size:11px;color:var(--text2)">${p.placeholder?'Platzhalter':esc(p.songs?.besetzung||'')}</div></div></div>${(p.dirigent||p.klavier||p.instrumente)?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border)">${p.dirigent?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Dirigent</span><span>${esc(p.dirigent)}</span></div>`:''}${p.klavier?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Klavier</span><span>${esc(p.klavier)}</span></div>`:''}${p.instrumente?`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--text3)">Instrumente</span><span>${esc(p.instrumente)}</span></div>`:''}</div>`:''}</div>`;
     }).join(''):'<p style="color:var(--text3);font-size:12px">Kein Programm</p>'}
-    <div class="ddiv"></div>
-    <div class="dl" style="margin-bottom:7px">Rollen</div>
-    <div style="background:var(--card);border-radius:var(--r);border:0.5px solid var(--border)">${[['Verantwortlich',e.dirigent],['Chor',e.chor],['Thema',e.thema]].filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:7px 11px;border-bottom:0.5px solid var(--border);font-size:13px"><span style="color:var(--text2)">${l}</span><span>${esc(v)}</span></div>`).join('')}${(e.event_tasks||[]).map(t=>`<div style="display:flex;justify-content:space-between;padding:7px 11px;border-bottom:0.5px solid var(--border);font-size:13px"><span style="color:var(--text2)">${esc(t.aufgabe)}</span><span>${esc(t.person)}</span></div>`).join('')}</div>
-    <div class="ddiv"></div>
-    <div class="dl" style="margin-bottom:7px">Anwesenheit</div>
-    ${(()=>{
+    ${(()=>{const rows=[['Verantwortlich',e.dirigent],['Thema',e.thema],...(e.event_tasks||[]).map(t=>[t.aufgabe,t.person])].filter(([,v])=>v);return rows.length?`<div class="ddiv" style="margin:8px 0"></div><div style="background:var(--card);border-radius:var(--r);border:0.5px solid var(--border)">${rows.map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 10px;border-bottom:0.5px solid var(--border);font-size:12px"><span style="color:var(--text2)">${esc(l)}</span><span>${esc(v)}</span></div>`).join('')}</div>`:''})()}
+    ${isAdmin?(()=>{
       const att=e.attendance||[];
       const yes=att.filter(m=>m.status==='yes').length;
       const no=att.filter(m=>m.status==='no').length;
-      return`${yes||no?`<div style="display:flex;gap:12px;margin-bottom:10px">
-        ${yes?`<div style="text-align:center"><div style="font-size:18px;font-weight:600;color:var(--success)">${yes}</div><div style="font-size:10px;color:var(--text3)">anwesend</div></div>`:''}
-        ${no?`<div style="text-align:center"><div style="font-size:18px;font-weight:600;color:var(--danger)">${no}</div><div style="font-size:10px;color:var(--text3)">abwesend</div></div>`:''}
-      </div>`:''}
+      return`<div class="ddiv" style="margin:8px 0"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="dl">Anwesenheit</div>
+        <div style="display:flex;gap:10px;font-size:12px">
+          ${yes?`<span style="color:var(--success)">✓ ${yes}</span>`:''}
+          ${no?`<span style="color:var(--danger)">✗ ${no}</span>`:''}
+        </div>
+      </div>
       ${att.map(m=>`<div class="atti">
         <div><span style="font-size:13px">${esc(m.profiles?.name||'?')}</span> <span style="font-size:11px;color:var(--text3)">${esc(m.profiles?.stimme||'')}</span></div>
-        ${isAdmin?`<div class="attb">
+        <div class="attb">
           <button class="ab ${m.status==='yes'?'yes':''}" onclick="setAtt('${e.id}','${m.member_id}','yes')">✓</button>
           <button class="ab ${m.status==='no'?'no':''}" onclick="setAtt('${e.id}','${m.member_id}','no')">✗</button>
-        </div>`:`<span>${m.status==='yes'?'<span style="color:var(--success)">✓</span>':m.status==='no'?'<span style="color:var(--danger)">✗</span>':'<span style="color:var(--text3)">–</span>'}</span>`}
+        </div>
       </div>`).join('')}`;
-    })()}
-    ${e.notizen?`<div class="ddiv"></div><div class="dl">Notizen</div><div style="font-size:13px;margin-top:4px">${esc(e.notizen)}</div>`:''}`;
+    })():''}
+    ${e.notizen?`<div class="ddiv" style="margin:8px 0"></div><div style="font-size:12px;color:var(--text2)">${esc(e.notizen)}</div>`:''}`;
   const footer=document.getElementById('ed-footer');footer.innerHTML='';
   if(isAdmin){
     const eb=document.createElement('button');eb.className='btn btn-g';eb.style.flex='1';eb.textContent='Bearbeiten';eb.onclick=()=>{closeModal('m-ev-detail');openEventForm(e.id);};

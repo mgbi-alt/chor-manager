@@ -73,6 +73,8 @@ function startApp(){
   if(can('songs_edit'))['song-add-btn','song-ai-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
   if(can('events_edit'))['ev-add-btn','ev-chat-btn','ev-export-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
   if(isAdmin)['ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+  const niStats=document.getElementById('ni-stats');if(niStats)niStats.style.display=can('tab_stats')?'':'none';
+  const niMedia=document.getElementById('ni-media');if(niMedia)niMedia.style.display=can('tab_media')?'':'none';
   SB.channel('rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>{loadUnread();if(document.getElementById('page-ann').classList.contains('active'))renderAnn();}).subscribe();
   // Track last seen
   SB.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',currentUser.id).then(()=>{});

@@ -753,8 +753,9 @@ async function reanalyzePdf(evt){
 
 async function renderSettings(tab='members'){
   if(currentProfile?.role!=='admin'){document.getElementById('settings-body').innerHTML='<p style="color:var(--text2)">Nur für Admins.</p>';return;}
-  const tabs=`<div class="view-tabs" style="margin-bottom:16px">
+  const tabs=`<div class="view-tabs" style="margin-bottom:16px;flex-wrap:wrap">
     <div class="vtab ${tab==='members'?'active':''}" onclick="renderSettings('members')">Mitglieder</div>
+    <div class="vtab ${tab==='tabs'?'active':''}" onclick="renderSettings('tabs')">Tabs</div>
     <div class="vtab ${tab==='infos'?'active':''}" onclick="renderSettings('infos')">Infos</div>
     <div class="vtab ${tab==='quelle'?'active':''}" onclick="renderSettings('quelle')">Quellen</div>
     <div class="vtab ${tab==='settings'?'active':''}" onclick="renderSettings('settings')">Einstellungen</div>
@@ -792,6 +793,38 @@ async function renderSettings(tab='members'){
           </div>`;
         }).join('')}
     `;
+    return;
+  }
+  if(tab==='tabs'){
+    const{data:members}=await SB.from('profiles').select('*').order('name');
+    const ALL_TABS=[{key:'tab_stats',label:'Statistiken'},{key:'tab_media',label:'Mediathek'}];
+    const groups=[
+      {label:'Mitglieder',filter:m=>m.role==='member'&&!(m.role2||'').includes('dirigent')&&!(m.role2||'').includes('klavier')},
+      {label:'Dirigenten',filter:m=>(m.role2||'').includes('dirigent')},
+      {label:'Klavieristen',filter:m=>(m.role2||'').includes('klavier')},
+    ];
+    function groupHasTab(grpMembers,key){const n=grpMembers.filter(m=>(m.role2||'').includes(key)).length;return n>0&&n>=grpMembers.length/2;}
+    document.getElementById('settings-body').innerHTML=tabs+`
+      <div class="st">Tab-Zugriffsrechte</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Start, Lieder, Veranstaltungen und Kalender sind immer sichtbar. Hier können zusätzliche Tabs pro Gruppe freigeschaltet werden.</div>
+      ${groups.map(g=>{
+        const gm=(members||[]).filter(g.filter);
+        return`<div class="card" style="cursor:default;margin-bottom:10px">
+          <div style="font-weight:500;margin-bottom:8px">${g.label} <span style="font-size:11px;color:var(--text3)">(${gm.length} ${gm.length===1?'Person':'Personen'})</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${ALL_TABS.map(t=>{
+              const on=groupHasTab(gm,t.key);
+              const ids=JSON.stringify(gm.map(m=>m.id));
+              return`<label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" ${on?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)" onchange="applyTabPerm('${t.key}',this.checked,${ids})">
+                <span style="font-size:13px">${t.label}</span>
+                <span style="font-size:11px;color:var(--text3)">${on?gm.filter(m=>(m.role2||'').includes(t.key)).length+'/'+gm.length+' aktiv':'nicht aktiv'}</span>
+              </label>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:11px;color:var(--text3)">Individuelle Abweichungen können im Bearbeiten-Dialog eines Mitglieds gesetzt werden.</div>`;
     return;
   }
   if(tab==='settings'){
@@ -872,7 +905,7 @@ async function renderSettings(tab='members'){
     ${(members||[]).map(m=>{const isMe=m.id===currentUser.id;const isActive=m.active!==false;
       const mPerms=(m.role2||'').split(',').map(s=>s.trim());
       const mMusRole=mPerms.filter(p=>['dirigent','klavier'].includes(p)).map(r=>r==='dirigent'?'Dirigent':'Klavier').join(' & ');
-      const mPermBadges=[mPerms.includes('songs_edit')?'<span class="badge green" style="font-size:9px">Lieder</span>':'',mPerms.includes('events_edit')?'<span class="badge blue" style="font-size:9px">Veranstaltungen</span>':''].filter(Boolean).join('');
+      const mPermBadges=[mPerms.includes('songs_edit')?'<span class="badge green" style="font-size:9px">Lieder</span>':'',mPerms.includes('events_edit')?'<span class="badge blue" style="font-size:9px">Veranstaltungen</span>':'',mPerms.includes('tab_stats')?'<span class="badge gray" style="font-size:9px">Stats</span>':'',mPerms.includes('tab_media')?'<span class="badge gray" style="font-size:9px">Medien</span>':''].filter(Boolean).join('');
       return`<div class="card" style="cursor:default;${!isActive?'opacity:.5':''}">
         <div class="crow">
           <div><div style="font-weight:500">${esc(m.name)}</div>
@@ -920,6 +953,31 @@ async function deleteCat(id){if(!confirm('Kategorie löschen?'))return;await SB.
 async function toggleMemberRole(id,role){const nr=role==='admin'?'member':'admin';if(!confirm(`Rolle zu "${nr==='admin'?'Admin':'Mitglied'}" wechseln?`))return;await SB.from('profiles').update({role:nr}).eq('id',id);renderSettings('members');T('Rolle geändert','ok');}
 async function toggleRole2(id,current){const opts=['','dirigent','klavier','dirigent,klavier'];const labels=['Keine','Dirigent','Klavier','Dirigent & Klavier'];const cur=opts.indexOf(current);const next=(cur+1)%opts.length;await SB.from('profiles').update({role2:opts[next]||null}).eq('id',id);renderSettings('members');T(`Zusatzrolle: ${labels[next]}`,'ok');}
 async function toggleActive(id,isActive){if(!confirm(isActive?'Mitglied deaktivieren?':'Mitglied aktivieren?'))return;await SB.from('profiles').update({active:!isActive}).eq('id',id);renderSettings('members');T(isActive?'Deaktiviert':'Aktiviert','ok');}
+async function applyTabPerm(tabKey,enabled,memberIds){
+  if(!memberIds.length){T('Keine Mitglieder in dieser Gruppe','err');return;}
+  const{data:{session}}=await SB.auth.getSession();
+  const token=session?.access_token;
+  let ok=0;
+  for(const userId of memberIds){
+    const{data:m}=await SB.from('profiles').select('role2').eq('id',userId).single();
+    const parts=(m?.role2||'').split(',').filter(Boolean);
+    if(enabled&&!parts.includes(tabKey))parts.push(tabKey);
+    else if(!enabled)parts.splice(parts.indexOf(tabKey),1);
+    const role2=parts.join(',')||null;
+    // Try edge function first (bypasses RLS), fallback to direct
+    try{
+      const res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({userId,profile:{role2}})
+      });
+      if(res.ok)ok++;
+    }catch{
+      await SB.from('profiles').update({role2}).eq('id',userId);ok++;
+    }
+  }
+  T(`${ok} Mitglied${ok!==1?'er':''} aktualisiert`,'ok');
+  renderSettings('tabs');
+}
 
 let _editMemberId=null,_editMemberOrigEmail=null;
 function openEditMember(m){
@@ -936,6 +994,8 @@ function openEditMember(m){
   document.getElementById('em-role2').value=musRole;
   document.getElementById('em-perm-songs').checked=perms.includes('songs_edit');
   document.getElementById('em-perm-events').checked=perms.includes('events_edit');
+  document.getElementById('em-perm-stats').checked=perms.includes('tab_stats');
+  document.getElementById('em-perm-media').checked=perms.includes('tab_media');
   document.getElementById('em-email').value=m.email||'';
   document.getElementById('em-pass').value='';
   document.getElementById('em-pass2').value='';
@@ -953,6 +1013,8 @@ async function saveEditMember(){
   const permParts=[...musRole?musRole.split(','):[]];
   if(document.getElementById('em-perm-songs').checked)permParts.push('songs_edit');
   if(document.getElementById('em-perm-events').checked)permParts.push('events_edit');
+  if(document.getElementById('em-perm-stats').checked)permParts.push('tab_stats');
+  if(document.getElementById('em-perm-media').checked)permParts.push('tab_media');
   const role2=permParts.join(',')||null;
   const email=document.getElementById('em-email').value.trim();
   const pass=document.getElementById('em-pass').value;

@@ -233,7 +233,7 @@ function showMergeGroup(){
 
   group.forEach((s,i)=>{
     const card=document.createElement('div');
-    card.style.cssText='background:'+(i===0?'rgba(201,168,76,.08)':'rgba(91,141,238,.06)')+';border:0.5px solid '+(i===0?'rgba(201,168,76,.25)':'rgba(91,141,238,.2)')+';border-radius:var(--r);padding:9px 11px;margin-bottom:6px';
+    card.style.cssText='background:'+(i===0?'rgba(122,59,46,.08)':'rgba(91,141,238,.06)')+';border:0.5px solid '+(i===0?'rgba(122,59,46,.25)':'rgba(91,141,238,.2)')+';border-radius:var(--r);padding:9px 11px;margin-bottom:6px';
     const badge=i===0?'<span style="font-size:9px;background:var(--accent);color:var(--bg);border-radius:8px;padding:1px 6px;font-weight:600">ZIEL</span>':'<span style="font-size:9px;background:rgba(91,141,238,.3);color:#8fb3f5;border-radius:8px;padding:1px 6px">DUPLIKAT</span>';
     const repBadge=s.in_repertoire?'<span class="badge green" style="font-size:9px">Repertoire</span>':'<span class="badge gray" style="font-size:9px">Datenbank</span>';
     card.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+badge+repBadge+'</div>'
@@ -269,7 +269,7 @@ function showMergeGroup(){
       group.forEach((s,i)=>{
         const v=s[f]||'';
         const chip=document.createElement('div');
-        chip.style.cssText='cursor:pointer;background:'+(i===0?'rgba(201,168,76,.08)':'rgba(91,141,238,.06)')+';border:0.5px solid '+(i===0?'rgba(201,168,76,.2)':'rgba(91,141,238,.15)')+';border-radius:6px;padding:5px 8px;font-size:11px;transition:border-color .15s,opacity .15s';
+        chip.style.cssText='cursor:pointer;background:'+(i===0?'rgba(122,59,46,.08)':'rgba(91,141,238,.06)')+';border:0.5px solid '+(i===0?'rgba(122,59,46,.2)':'rgba(91,141,238,.15)')+';border-radius:6px;padding:5px 8px;font-size:11px;transition:border-color .15s,opacity .15s';
         chip.title='Klicken zum Übernehmen';
         const chipLabel=document.createElement('div');
         chipLabel.style.cssText='font-size:9px;color:'+(i===0?'var(--accent2)':'#8fb3f5')+';margin-bottom:2px';
@@ -778,7 +778,7 @@ function renderReassign(songMap,fileMap){
   style.textContent=`
     .rr-row{display:grid;grid-template-columns:28px 1fr auto auto;gap:0;padding:5px 10px;border-bottom:0.5px solid var(--border);align-items:center;cursor:pointer;transition:background .1s}
     .rr-row:hover{background:var(--hover)}
-    .rr-row.rr-sel{background:rgba(201,168,76,.1);border-left:2px solid var(--accent)}
+    .rr-row.rr-sel{background:rgba(122,59,46,.1);border-left:2px solid var(--accent)}
     .rr-row.rr-ok{opacity:.45}
     .rr-row.rr-bad{background:rgba(232,112,112,.07)}
     .rr-thumb{border-radius:3px;box-shadow:0 1px 6px rgba(0,0,0,.4);background:#fff;display:block}
@@ -1020,9 +1020,9 @@ function renderReassign(songMap,fileMap){
       title.textContent='Falsche PDFs ('+badRows.length+')';leftPane.appendChild(title);
       badRows.forEach((row,i)=>{
         const tr=document.createElement('div');
-        tr.style.cssText='padding:6px 10px;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:12px;transition:background .1s;background:'+(i===gallerySelIdx?'rgba(201,168,76,.1)':'');
+        tr.style.cssText='padding:6px 10px;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:12px;transition:background .1s;background:'+(i===gallerySelIdx?'rgba(122,59,46,.1)':'');
         tr.onmouseenter=()=>{if(i!==gallerySelIdx)tr.style.background='var(--hover)';};
-        tr.onmouseleave=()=>{tr.style.background=i===gallerySelIdx?'rgba(201,168,76,.1)':'';};
+        tr.onmouseleave=()=>{tr.style.background=i===gallerySelIdx?'rgba(122,59,46,.1)':'';};
         tr.innerHTML=(row.song.quelle_nr?'<b style="color:var(--accent2)">'+row.song.quelle_nr+'</b> ':'')
           +'<span>'+esc(row.song.liedanfang||row.song.title||'–')+'</span>'
           +(row.assignedTo!==row.song.id?'<div style="font-size:10px;color:#8fb3f5">→ umgeleitet</div>':'');

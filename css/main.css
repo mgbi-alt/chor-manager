@@ -159,31 +159,36 @@ textarea.fi{resize:vertical;min-height:70px;}
 .view-tabs{display:flex;gap:4px;margin-bottom:10px;}
 .vtab{padding:4px 10px;border-radius:20px;font-size:11px;background:var(--card);border:0.5px solid var(--border);color:var(--text2);cursor:pointer;}
 .vtab.active{background:rgba(122,59,46,.15);border-color:var(--accent);color:var(--accent2);}
-.chead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.chead{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.chead .cmonth{flex:1;text-align:center;}
 .cmonth{font-family:var(--fd);font-size:15px;font-weight:600;}
-.cgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:6px;}
-.cdow{font-size:8px;color:var(--text3);text-align:center;padding:3px 0;font-weight:500;}
-.cday-wrap{position:relative;aspect-ratio:1;}
-.cday{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:3px;border-radius:6px;cursor:pointer;position:relative;font-size:10px;overflow:hidden;}
+.cgrid{display:grid;grid-template-columns:repeat(7,1fr);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--card);}
+.cdow{font-size:9px;color:var(--text3);text-align:center;padding:6px 0 5px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid var(--border);background:var(--bg2);}
+.cday-wrap{position:relative;border-right:0.5px solid var(--border);border-bottom:0.5px solid var(--border);}
+.cday-wrap:nth-child(7n){border-right:none;}
+.cday{width:100%;min-height:60px;display:flex;flex-direction:column;align-items:stretch;padding:3px 4px;cursor:pointer;position:relative;font-size:10px;overflow:hidden;transition:background .12s;}
 .cday:hover{background:rgba(61,46,34,.05);}
-.cday.today .cdnum{background:var(--accent);color:var(--bg);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;}
-.cday.other-month{color:var(--text3);}
-.cday.holiday{color:var(--danger);}
-.cdnum{font-size:10px;line-height:1;margin-bottom:1px;}
+.cday.today .cdnum{background:var(--accent);color:var(--bg2);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;}
+.cday.other-month{opacity:.4;}
+.cday.holiday .cdnum{color:var(--danger);}
+.cdnum{font-size:11px;line-height:1;margin-bottom:2px;font-weight:500;align-self:flex-end;}
 .cevt-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);margin:1px auto;}
 .cevt-bar{position:absolute;bottom:2px;left:0;right:0;height:4px;border-radius:2px;font-size:0;}
 /* Full calendar event blocks */
-.cal-event-block{font-size:9px;padding:1px 3px;border-radius:3px;color:#fff;margin:1px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.4;}
+.cal-event-block{font-size:9px;padding:2px 4px;border-radius:4px;color:#fff;margin:1px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.5;cursor:pointer;}
 .cal-event-block.kein-chor{text-decoration:line-through;opacity:.85;}
+.cal-event-block:active{opacity:.75;}
 /* Event list */
 .cevt{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:8px 10px;margin-bottom:6px;border-left:3px solid var(--accent);}
 .cevt.highlighted{background:rgba(122,59,46,.12);border-color:var(--accent);}
 .cevt-holiday{background:rgba(224,85,85,.07);border:0.5px solid rgba(224,85,85,.2);border-radius:var(--r);padding:6px 10px;margin-bottom:5px;font-size:12px;}
-/* Mini calendar */
+/* Mini calendar (3-Monate / Jahr Übersicht bleibt kompakt) */
 .cal-mini{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:7px;min-width:0;}
-.cal-mini .cgrid{grid-template-columns:repeat(7,minmax(0,1fr));}
-.cal-mini .cdow{font-size:7px;}
-.cal-mini .cday{font-size:9px;}
+.cal-mini .cgrid{grid-template-columns:repeat(7,minmax(0,1fr));border:none;border-radius:0;background:none;}
+.cal-mini .cdow{font-size:7px;border-bottom:none;background:none;padding:2px 0;}
+.cal-mini .cday-wrap{aspect-ratio:1;border:none;}
+.cal-mini .cday{font-size:9px;min-height:0;align-items:center;padding-top:3px;}
+.cal-mini .cdnum{align-self:center;}
 
 /* ANNOUNCEMENTS */
 .acard{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r2);padding:12px 14px;margin-bottom:9px;}

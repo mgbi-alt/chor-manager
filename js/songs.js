@@ -24,7 +24,7 @@ function updateSourceBtn(){
   if(!dbCount){btn.style.display='none';return;}
   btn.style.display='';
   btn.textContent=showAllSources?'Nur Repertoire':'+ Datenbank ('+dbCount+')';
-  btn.style.background=showAllSources?'rgba(201,168,76,.15)':'';
+  btn.style.background=showAllSources?'rgba(122,59,46,.15)':'';
   btn.style.borderColor=showAllSources?'var(--accent)':'';
   btn.style.color=showAllSources?'var(--accent2)':'var(--text2)';
 }

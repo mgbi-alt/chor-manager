@@ -116,8 +116,8 @@ async function renderCal(){
           <div class="cdnum">${d}</div>
           ${isHol?`<div style="font-size:6px;color:var(--danger);line-height:1.1;text-align:center;overflow:hidden;max-height:14px">${esc(holidays[ds])}</div>`:''}
           ${!isHol&&fer?`<div style="font-size:6px;color:#8fb3f5;line-height:1.1;text-align:center">Ferien</div>`:''}
-          ${singleEvs.slice(0,isHol||fer?0:2).map(e=>`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();highlightCalEvt('${e.id}')">${esc(e.title)}</div>`).join('')}
-          ${evs.length>2?`<div style="font-size:6px;color:var(--text3)">+${evs.length-2}…</div>`:''}
+          ${singleEvs.slice(0,isHol||fer?0:3).map(e=>`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:(isAdmin?`openCalForm('${e.id}',null)`:`highlightCalEvt('${e.id}')`)}">${esc(e.title)}</div>`).join('')}
+          ${evs.length>3?`<div style="font-size:9px;color:var(--text3)">+${evs.length-3} mehr</div>`:''}
         </div>
       </div>`;
     }
@@ -132,13 +132,13 @@ async function renderCal(){
       const colStart=startDay+fd;
       const colEnd=endDay+fd+1;
       const color=e.color||catColor(e.category);
-      return`<div style="grid-column:${colStart}/${colEnd};background:${esc(color)};border-radius:3px;padding:1px 4px;font-size:8px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;margin:1px 1px 0;line-height:1.5" onclick="${e._isVeranst?`openEvDetail('${e.id}')`:`highlightCalEvt('${e.id}')`}" title="${esc(e.title)}">${esc(e.title)}</div>`;
+      return`<div style="grid-column:${colStart}/${colEnd};background:${esc(color)};border-radius:4px;padding:2px 5px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;margin:1px 1px 0;line-height:1.5" onclick="${e._isVeranst?`openEvDetail('${e.id}')`:(isAdmin?`openCalForm('${e.id}',null)`:`highlightCalEvt('${e.id}')`)}" title="${esc(e.title)}">${esc(e.title)}</div>`;
     }).join('');
     const upEvts=allEvts.sort((a,b)=>a.datum.localeCompare(b.datum));
     const holList=Object.entries(holidays).filter(([d])=>d.startsWith(`${y}-${String(m+1).padStart(2,'0')}`)).sort(([a],[b])=>a.localeCompare(b));
     const ferList=getNRWSchoolHolidays(y).filter(f=>{const fm=new Date(f.from).getMonth()+1,tm=new Date(f.to).getMonth()+1,my=m+1;return fm<=my&&tm>=my;});
     el.innerHTML=viewTabs+
-      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calNav(-1)">‹</button><div class="cmonth">${mn[m]} ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(1)">›</button></div>
+      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calToday()">Heute</button><button class="btn btn-g btn-sm" onclick="calNav(-1)">‹</button><div class="cmonth">${mn[m]} ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(1)">›</button></div>
       <div style="position:relative">
         <div class="cgrid">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(d=>`<div class="cdow">${d}</div>`).join('')}${cells}</div>
         ${multiEvts.length?`<div style="display:grid;grid-template-columns:repeat(7,1fr);position:absolute;top:22px;left:0;right:0;pointer-events:none"><div style="grid-column:1/8;display:grid;grid-template-columns:repeat(${fd+dim},1fr);pointer-events:all">${multiRows}</div></div>`:''}
@@ -164,7 +164,7 @@ async function renderCal(){
     for(let i=0;i<3;i++){const mm=(m+i)%12;const yy=y+Math.floor((m+i)/12);minis+=buildMiniCal(yy,mm,allEvts3,holidays,schoolDays);}
     const upEvts=allEvts3.sort((a,b)=>a.datum.localeCompare(b.datum));
     el.innerHTML=viewTabs+
-      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calNav(-3)">‹</button><div class="cmonth">${mn[m]} – ${mn[(m+2)%12]} ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(3)">›</button></div>
+      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calToday()">Heute</button><button class="btn btn-g btn-sm" onclick="calNav(-3)">‹</button><div class="cmonth">${mn[m]} – ${mn[(m+2)%12]} ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(3)">›</button></div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">${minis}</div>
       <div id="cal-evt-list">${upEvts.length?upEvts.map(e=>evtListItem(e,isAdmin)).join(''):'<p style="color:var(--text3);font-size:12px">Keine Termine</p>'}</div>`;
 
@@ -179,7 +179,7 @@ async function renderCal(){
     let minis='';
     for(let i=0;i<12;i++)minis+=buildMiniCal(y,i,allEvtsY,holidays,schoolDays);
     el.innerHTML=viewTabs+
-      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calNav(-12)">‹</button><div class="cmonth">Jahr ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(12)">›</button></div>
+      `<div class="chead"><button class="btn btn-g btn-sm" onclick="calToday()">Heute</button><button class="btn btn-g btn-sm" onclick="calNav(-12)">‹</button><div class="cmonth">Jahr ${y}</div><button class="btn btn-g btn-sm" onclick="calNav(12)">›</button></div>
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px">${minis}</div>
       <div id="cal-evt-list">${allEvtsY.length?allEvtsY.sort((a,b)=>a.datum.localeCompare(b.datum)).map(e=>evtListItem(e,isAdmin)).join(''):'<p style="color:var(--text3);font-size:12px">Keine Termine</p>'}</div>`;
   }
@@ -214,7 +214,7 @@ function highlightCalEvt(id){
   document.querySelectorAll('.cevt.highlighted').forEach(el=>{el.classList.remove('highlighted');el.style.background='';});
   const target=document.getElementById('evtli-'+id);
   if(target){
-    target.style.background='rgba(201,168,76,.12)';
+    target.style.background='rgba(122,59,46,.12)';
     target.scrollIntoView({behavior:'smooth',block:'center'});
     setTimeout(()=>{if(target)target.style.background='';},2500);
   }
@@ -222,7 +222,7 @@ function highlightCalEvt(id){
 function highlightCalEvtByDate(date){
   const targets=document.querySelectorAll(`[data-evtdate="${date}"]`);
   targets.forEach(t=>{
-    t.style.background='rgba(201,168,76,.12)';
+    t.style.background='rgba(122,59,46,.12)';
     t.scrollIntoView({behavior:'smooth',block:'center'});
     setTimeout(()=>{if(t)t.style.background='';},2500);
   });
@@ -233,6 +233,7 @@ function calNav(d){
   else calDate=new Date(calDate.getFullYear(),calDate.getMonth()+d,1);
   renderCal();
 }
+function calToday(){calDate=new Date();renderCal();}
 
 // ========== CALENDAR TOUCH SWIPE ==========
 let _calTouchX=0;

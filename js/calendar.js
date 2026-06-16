@@ -15,6 +15,18 @@ function catColor(cat){
   return c?.color||'#5b8dee';
 }
 
+// Liefert ein kurzes Icon-Suffix + Tooltip für Veranstaltungen mit
+// abweichendem Ort, Verantwortlichem oder Chor.
+function veranstExtra(e){
+  if(!e._isVeranst)return{icons:'',tip:''};
+  const icons=[];
+  const tips=[];
+  if(e.ort&&e.ort!=='Bielefeld'){icons.push('📍');tips.push(e.ort);}
+  if(e.dirigent){icons.push('👤');tips.push(e.dirigent);}
+  if(e.chor){icons.push('🎵');tips.push(e.chor);}
+  return{icons:icons.length?' '+icons.join(''):'',tip:tips.join(' · ')};
+}
+
 function buildMiniCal(y,m,allEvts,holidays,schoolDays){
   const fd=(new Date(y,m,1).getDay()+6)%7;
   const dim=new Date(y,m+1,0).getDate();
@@ -51,7 +63,8 @@ function buildMiniCal(y,m,allEvts,holidays,schoolDays){
       ${evs.slice(0,2).map(e=>{
   const kc=(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'||e.status==='kein_chor';
   const vs=e.status==='verschoben';
-  return`<div class="cal-event-block${kc?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${kc?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}">${esc(e.title)}${vs?' ↗':''}</div>`;
+  const{icons,tip}=veranstExtra(e);
+  return`<div class="cal-event-block${kc?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${kc?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}"${tip?` title="${esc(tip)}"`:''}>${esc(e.title)}${icons}${vs?' ↗':''}</div>`;
 }).join('')}
       ${evs.length>2?`<div style="font-size:6px;color:var(--text3);text-align:center">+${evs.length-2}</div>`:""}
     </div></div>`;
@@ -79,7 +92,7 @@ async function renderCal(){
     const to=`${y}-${String(m+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`;
     const[{data:evts},{data:veranst}]=await Promise.all([
       SB.from('calendar_events').select('*').lte('datum',to).gte('bis_datum',from).order('datum'),
-      SB.from('events').select('id,title,datum').gte('datum',from).lte('datum',to).order('datum')
+      SB.from('events').select('id,title,datum,ort,dirigent,chor').gte('datum',from).lte('datum',to).order('datum')
     ]);
     // Merge Veranstaltungen as calendar items (red)
     const allEvts=[...(evts||[]),...(veranst||[]).map(v=>({...v,bis_datum:v.datum,color:'#e05555',category:'Veranstaltung',_isVeranst:true}))];
@@ -115,7 +128,7 @@ async function renderCal(){
           <div class="cdnum">${d}</div>
           ${isHol?`<div style="font-size:6px;color:var(--danger);line-height:1.1;text-align:center;overflow:hidden;max-height:14px">${esc(holidays[ds])}</div>`:''}
           ${!isHol&&fer?`<div style="font-size:6px;color:#8fb3f5;line-height:1.1;text-align:center">Ferien</div>`:''}
-          ${singleEvs.slice(0,isHol||fer?0:3).map(e=>`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}">${esc(e.title)}</div>`).join('')}
+          ${singleEvs.slice(0,isHol||fer?0:3).map(e=>{const{icons,tip}=veranstExtra(e);return`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}"${tip?` title="${esc(tip)}"`:''}>${esc(e.title)}${icons}</div>`;}).join('')}
           ${evs.length>3?`<div style="font-size:9px;color:var(--text3)">+${evs.length-3} mehr</div>`:''}
         </div>
       </div>`;
@@ -131,7 +144,9 @@ async function renderCal(){
       const colStart=startDay+fd;
       const colEnd=endDay+fd+1;
       const color=e.color||catColor(e.category);
-      return`<div style="grid-column:${colStart}/${colEnd};background:${esc(color)};border-radius:4px;padding:2px 5px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;margin:1px 1px 0;line-height:1.5" onclick="${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}" title="${esc(e.title)}">${esc(e.title)}</div>`;
+      const{icons,tip}=veranstExtra(e);
+      const fullTip=[e.title,tip].filter(Boolean).join(' · ');
+      return`<div style="grid-column:${colStart}/${colEnd};background:${esc(color)};border-radius:4px;padding:2px 5px;font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;margin:1px 1px 0;line-height:1.5" onclick="${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}" title="${esc(fullTip)}">${esc(e.title)}${icons}</div>`;
     }).join('');
     const holList=Object.entries(holidays).filter(([d])=>d.startsWith(`${y}-${String(m+1).padStart(2,'0')}`)).sort(([a],[b])=>a.localeCompare(b));
     const ferList=getNRWSchoolHolidays(y).filter(f=>{const fm=new Date(f.from).getMonth()+1,tm=new Date(f.to).getMonth()+1,my=m+1;return fm<=my&&tm>=my;});
@@ -151,7 +166,7 @@ async function renderCal(){
     const to=`${m3end.getFullYear()}-${String(m3end.getMonth()+1).padStart(2,'0')}-${String(m3end.getDate()).padStart(2,'0')}`;
     const[{data:evts},{data:veranst}]=await Promise.all([
       SB.from('calendar_events').select('*').lte('datum',to).gte('bis_datum',from).order('datum'),
-      SB.from('events').select('id,title,datum').gte('datum',from).lte('datum',to).order('datum')
+      SB.from('events').select('id,title,datum,ort,dirigent,chor').gte('datum',from).lte('datum',to).order('datum')
     ]);
     const allEvts3=[...(evts||[]),...(veranst||[]).map(v=>({...v,bis_datum:v.datum,color:'#e05555',category:'Veranstaltung',_isVeranst:true}))];
     const holidays={...getNRWHolidays(y),...getNRWHolidays(y+1)};
@@ -165,7 +180,7 @@ async function renderCal(){
   } else {
     const[{data:evts},{data:veranst}]=await Promise.all([
       SB.from('calendar_events').select('*').gte('datum',`${y}-01-01`).lte('datum',`${y}-12-31`).order('datum'),
-      SB.from('events').select('id,title,datum').gte('datum',`${y}-01-01`).lte('datum',`${y}-12-31`).order('datum')
+      SB.from('events').select('id,title,datum,ort,dirigent,chor').gte('datum',`${y}-01-01`).lte('datum',`${y}-12-31`).order('datum')
     ]);
     const allEvtsY=[...(evts||[]),...(veranst||[]).map(v=>({...v,bis_datum:v.datum,color:'#e05555',category:'Veranstaltung',_isVeranst:true}))];
     const holidays=getNRWHolidays(y);

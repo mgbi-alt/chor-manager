@@ -1,4 +1,4 @@
-# Chormanager – Projektübersicht für Claude Code
+# Cantamus (ehem. Chormanager) – Projektübersicht für Claude Code
 
 ## Was ist das?
 Eine Progressive Web App (PWA) für die Verwaltung eines Chors.

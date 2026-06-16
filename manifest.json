@@ -1,6 +1,6 @@
 {
-  "name": "Chor Manager",
-  "short_name": "Chor",
+  "name": "Cantamus",
+  "short_name": "Cantamus",
   "description": "Lied- und Veranstaltungsverwaltung für Chöre",
   "start_url": "/chor-manager/",
   "scope": "/chor-manager/",

@@ -1,4 +1,4 @@
-const CACHE = 'chormanager-v26';
+const CACHE = 'chormanager-v27';
 
 // ===== INSTALL =====
 self.addEventListener('install', e => {
@@ -28,7 +28,7 @@ self.addEventListener('fetch', e => {
 
 // ===== PUSH: empfange Benachrichtigung =====
 self.addEventListener('push', e => {
-  let data = { title: 'Chormanager', body: 'Neue Info' };
+  let data = { title: 'Cantamus', body: 'Neue Info' };
   try { data = e.data?.json() || data; } catch (_) {}
 
   const options = {

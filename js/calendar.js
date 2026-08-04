@@ -91,7 +91,7 @@ async function renderCal(){
     const from=`${y}-${String(m+1).padStart(2,'0')}-01`;
     const to=`${y}-${String(m+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`;
     const[{data:evts},{data:veranst}]=await Promise.all([
-      SB.from('calendar_events').select('*').lte('datum',to).gte('bis_datum',from).order('datum'),
+      SB.from('calendar_events').select('*').lte('datum',to).or(`bis_datum.gte.${from},bis_datum.is.null`).order('datum'),
       SB.from('events').select('id,title,datum,ort,dirigent,chor').gte('datum',from).lte('datum',to).order('datum')
     ]);
     // Merge Veranstaltungen as calendar items (red)
@@ -165,7 +165,7 @@ async function renderCal(){
     const m3end=new Date(y,m+3,0);
     const to=`${m3end.getFullYear()}-${String(m3end.getMonth()+1).padStart(2,'0')}-${String(m3end.getDate()).padStart(2,'0')}`;
     const[{data:evts},{data:veranst}]=await Promise.all([
-      SB.from('calendar_events').select('*').lte('datum',to).gte('bis_datum',from).order('datum'),
+      SB.from('calendar_events').select('*').lte('datum',to).or(`bis_datum.gte.${from},bis_datum.is.null`).order('datum'),
       SB.from('events').select('id,title,datum,ort,dirigent,chor').gte('datum',from).lte('datum',to).order('datum')
     ]);
     const allEvts3=[...(evts||[]),...(veranst||[]).map(v=>({...v,bis_datum:v.datum,color:'#e05555',category:'Veranstaltung',_isVeranst:true}))];

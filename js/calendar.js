@@ -128,7 +128,7 @@ async function renderCal(){
           <div class="cdnum">${d}</div>
           ${isHol?`<div style="font-size:6px;color:var(--danger);line-height:1.1;text-align:center;overflow:hidden;max-height:14px">${esc(holidays[ds])}</div>`:''}
           ${!isHol&&fer?`<div style="font-size:6px;color:#8fb3f5;line-height:1.1;text-align:center">Ferien</div>`:''}
-          ${singleEvs.slice(0,isHol||fer?0:3).map(e=>{const{icons,tip}=veranstExtra(e);return`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}"${tip?` title="${esc(tip)}"`:''}>${esc(e.title)}${icons}</div>`;}).join('')}
+          ${singleEvs.slice(0,isHol?0:3).map(e=>{const{icons,tip}=veranstExtra(e);return`<div class="cal-event-block${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?' kein-chor':''}" style="background:${esc(e.color||catColor(e.category))};${(e.category||'').toLowerCase().replace(/\s+/g,'')==='keinchor'?'text-decoration:line-through':''}" onclick="event.stopPropagation();${e._isVeranst?`openEvDetail('${e.id}')`:`openCalForm('${e.id}',null)`}"${tip?` title="${esc(tip)}"`:''}>${esc(e.title)}${icons}</div>`;}).join('')}
           ${evs.length>3?`<div style="font-size:9px;color:var(--text3)">+${evs.length-3} mehr</div>`:''}
         </div>
       </div>`;

@@ -67,6 +67,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .sp-item:active,.sp-item:hover{background:rgba(122,59,46,.08);}
 .sp-special{color:var(--accent2);font-weight:600;}
 .sp-letter-hdr{font-size:10px;font-weight:700;color:var(--accent);padding:8px 10px 2px;letter-spacing:.08em;opacity:.7;background:var(--bg2);}
+.sp-sub{font-size:10px;color:var(--text2);margin-top:2px;}
 .prog-song-display{min-height:36px;user-select:none;-webkit-user-select:none;}
 .prog-song-display:active{opacity:.75;}
 

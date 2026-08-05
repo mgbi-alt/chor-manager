@@ -187,7 +187,7 @@ async function setAtt(evId,mId,val){
 }
 async function openEventForm(id=null){
   editEvId=id;
-  const{data:songs}=await SB.from('songs').select('id,title,liedanfang,besetzung').eq('in_repertoire',true).order('liedanfang',{nullsFirst:false}).order('title');
+  const{data:songs}=await SB.from('songs').select('id,title,liedanfang,besetzung,arrangeur').eq('in_repertoire',true).order('liedanfang',{nullsFirst:false}).order('title');
   const{data:members}=await SB.from('profiles').select('id,name').order('name');
   let e={};
   if(id){const{data}=await SB.from('events').select('*,event_program(*),event_tasks(*)').eq('id',id).single();e=data||{};}
@@ -327,13 +327,21 @@ function closeSongPicker(){closeModal('m-song-picker');}
 
 function filterSongPicker(q){_renderSongPickerList(q);}
 
+function _spSub(s){
+  const parts=[];
+  if(s.besetzung)parts.push(s.besetzung);
+  if(s.arrangeur)parts.push('Arr. '+s.arrangeur);
+  return parts.join(' · ');
+}
 function _renderSongPickerList(q){
   const songs=window._efSongs||[];
   const lq=(q||'').toLowerCase().trim();
   const filtered=lq?songs.filter(s=>{
     const a=(s.liedanfang||'').toLowerCase();
     const t=(s.title||'').toLowerCase();
-    return a.includes(lq)||t.includes(lq);
+    const b=(s.besetzung||'').toLowerCase();
+    const r=(s.arrangeur||'').toLowerCase();
+    return a.includes(lq)||t.includes(lq)||b.includes(lq)||r.includes(lq);
   }):songs;
 
   // Special options always at top
@@ -358,16 +366,17 @@ function _renderSongPickerList(q){
       const key=/[A-ZÄÖÜ]/.test(first)?first:'#';
       if(!groups[key])groups[key]=[];
       const label=s.liedanfang?(s.title&&s.title!==s.liedanfang?`${s.liedanfang} | ${s.title}`:s.liedanfang):s.title||'?';
-      groups[key].push({id:s.id,label});
+      groups[key].push({id:s.id,label,sub:_spSub(s)});
     });
     const letters=Object.keys(groups).sort();
-    html+=letters.map(l=>`<div class="sp-letter-hdr" id="sp-ltr-${l}">${l}</div>${groups[l].map(s=>`<div class="sp-item" onclick="selectPickerSong('${s.id}','${s.label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(s.label)}</div>`).join('')}`).join('');
+    html+=letters.map(l=>`<div class="sp-letter-hdr" id="sp-ltr-${l}">${l}</div>${groups[l].map(s=>`<div class="sp-item" onclick="selectPickerSong('${s.id}','${s.label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(s.label)}${s.sub?`<div class="sp-sub">${esc(s.sub)}</div>`:''}</div>`).join('')}`).join('');
     // Alpha sidebar
     alphaEl.innerHTML=letters.map(l=>`<span class="alpha-ltr" onclick="document.getElementById('sp-ltr-${l}')?.scrollIntoView({block:'start'});event.stopPropagation()" style="font-size:9px;line-height:1;cursor:pointer;color:var(--accent);font-weight:600;padding:1px 2px">${l}</span>`).join('');
   } else {
     html+=filtered.map(s=>{
       const label=s.liedanfang?(s.title&&s.title!==s.liedanfang?`${s.liedanfang} | ${s.title}`:s.liedanfang):s.title||'?';
-      return`<div class="sp-item" onclick="selectPickerSong('${s.id}','${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(label)}</div>`;
+      const sub=_spSub(s);
+      return`<div class="sp-item" onclick="selectPickerSong('${s.id}','${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(label)}${sub?`<div class="sp-sub">${esc(sub)}</div>`:''}</div>`;
     }).join('');
     alphaEl.innerHTML='';
   }

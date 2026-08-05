@@ -263,16 +263,25 @@ function buildProgRow(pos,p={},songs=[]){
   const phVal=isFreiesLied?p.placeholder.slice('[FreiesLied] '.length):isPlaceholder?(p.placeholder||''):'';
   const phLabel=isFreiesLied?'Liedtitel eingeben':'Beschreibung (z.B. Eingangslied)';
   const showPh=isPlaceholder||isFreiesLied;
+  // Determine display label for picker button
+  let dispLabel='– Lied auswählen –';
+  if(selVal==='__placeholder__')dispLabel='📌 Platzhalter';
+  else if(selVal==='__freies_lied__')dispLabel='🎵 Freies Lied';
+  else if(p.song_id){const s=songs.find(x=>x.id===p.song_id);if(s)dispLabel=s.liedanfang?(s.title&&s.title!==s.liedanfang?`${s.liedanfang} | ${s.title}`:s.liedanfang):s.title||'?';}
   return`<div class="ep-row prog-ep-row" draggable="true" ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dragDrop(event)" ondragend="dragEnd(event)">
     <div class="ep-row-header">
       <span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>
       <div class="pnum" style="width:22px;height:22px;font-size:11px">${pos}</div>
-      <select class="fi prog-song" style="flex:1" onchange="togglePlaceholder(this)">
+      <select class="prog-song" style="display:none">
         <option value="">– Lied –</option>
         <option value="__placeholder__" ${selVal==='__placeholder__'?'selected':''}>📌 Platzhalter</option>
         <option value="__freies_lied__" ${selVal==='__freies_lied__'?'selected':''}>🎵 Freies Lied</option>
         ${opts}
       </select>
+      <div class="fi prog-song-display" onclick="openSongPicker(this.closest('.prog-ep-row'))" title="Lied auswählen" style="flex:1;cursor:pointer;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:4px;padding-right:8px">
+        <span class="prog-song-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(dispLabel)}</span>
+        <span style="opacity:0.45;flex-shrink:0;font-size:13px">🔍</span>
+      </div>
       <button type="button" class="btn btn-d btn-sm" onclick="this.closest('.prog-ep-row').remove();renumberProgRows()" style="width:28px;height:28px;padding:0">✕</button>
     </div>
     <div class="prog-placeholder-name" style="${showPh?'':'display:none;'}margin-bottom:5px">
@@ -301,6 +310,90 @@ function togglePlaceholder(sel){
 }
 function renumberProgRows(){document.querySelectorAll('.prog-ep-row .pnum').forEach((el,i)=>el.textContent=i+1);}
 function addProgRow(){const c=document.getElementById('prog-rows');const p=c.querySelectorAll('.prog-ep-row').length+1;const d=document.createElement('div');d.innerHTML=buildProgRow(p,{},window._efSongs||[]);c.appendChild(d.firstElementChild);}
+
+// ===== SONG PICKER =====
+let _spRow=null; // current prog row for which picker is open
+
+function openSongPicker(rowEl){
+  _spRow=rowEl;
+  const inp=document.getElementById('sp-search');
+  if(inp)inp.value='';
+  _renderSongPickerList('');
+  openModal('m-song-picker');
+  setTimeout(()=>{if(inp)inp.focus();},200);
+}
+
+function closeSongPicker(){closeModal('m-song-picker');}
+
+function filterSongPicker(q){_renderSongPickerList(q);}
+
+function _renderSongPickerList(q){
+  const songs=window._efSongs||[];
+  const lq=(q||'').toLowerCase().trim();
+  const filtered=lq?songs.filter(s=>{
+    const a=(s.liedanfang||'').toLowerCase();
+    const t=(s.title||'').toLowerCase();
+    return a.includes(lq)||t.includes(lq);
+  }):songs;
+
+  // Special options always at top
+  const specials=[
+    {id:'',label:'– kein Lied –',special:true},
+    {id:'__placeholder__',label:'📌 Platzhalter',special:true},
+    {id:'__freies_lied__',label:'🎵 Freies Lied',special:true},
+  ];
+
+  const list=document.getElementById('sp-list');
+  const alphaEl=document.getElementById('sp-alpha');
+  if(!list)return;
+
+  // Build grouped by first letter (only when no search query)
+  let html=specials.map(s=>`<div class="sp-item sp-special" onclick="selectPickerSong('${s.id}','${s.label.replace(/'/g,"\\'")}')">${esc(s.label)}</div>`).join('');
+
+  if(!lq){
+    // Group by first letter of liedanfang
+    const groups={};
+    filtered.forEach(s=>{
+      const first=(s.liedanfang||s.title||'#')[0].toUpperCase();
+      const key=/[A-ZÄÖÜ]/.test(first)?first:'#';
+      if(!groups[key])groups[key]=[];
+      const label=s.liedanfang?(s.title&&s.title!==s.liedanfang?`${s.liedanfang} | ${s.title}`:s.liedanfang):s.title||'?';
+      groups[key].push({id:s.id,label});
+    });
+    const letters=Object.keys(groups).sort();
+    html+=letters.map(l=>`<div class="sp-letter-hdr" id="sp-ltr-${l}">${l}</div>${groups[l].map(s=>`<div class="sp-item" onclick="selectPickerSong('${s.id}','${s.label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(s.label)}</div>`).join('')}`).join('');
+    // Alpha sidebar
+    alphaEl.innerHTML=letters.map(l=>`<span class="alpha-ltr" onclick="document.getElementById('sp-ltr-${l}')?.scrollIntoView({block:'start'});event.stopPropagation()" style="font-size:9px;line-height:1;cursor:pointer;color:var(--accent);font-weight:600;padding:1px 2px">${l}</span>`).join('');
+  } else {
+    html+=filtered.map(s=>{
+      const label=s.liedanfang?(s.title&&s.title!==s.liedanfang?`${s.liedanfang} | ${s.title}`:s.liedanfang):s.title||'?';
+      return`<div class="sp-item" onclick="selectPickerSong('${s.id}','${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(label)}</div>`;
+    }).join('');
+    alphaEl.innerHTML='';
+  }
+
+  list.innerHTML=html;
+}
+
+function selectPickerSong(id,label){
+  if(!_spRow)return;
+  const sel=_spRow.querySelector('.prog-song');
+  const disp=_spRow.querySelector('.prog-song-label');
+  if(sel){
+    // Ensure option exists (for special values it always does, for song ids too)
+    sel.value=id;
+    // Trigger placeholder toggle logic
+    const ph=_spRow.querySelector('.prog-placeholder-name');
+    const phInp=ph?.querySelector('input');
+    if(ph&&phInp){
+      if(id==='__placeholder__'){ph.style.display='';phInp.placeholder='Beschreibung (z.B. Eingangslied)';}
+      else if(id==='__freies_lied__'){ph.style.display='';phInp.placeholder='Liedtitel eingeben';}
+      else{ph.style.display='none';}
+    }
+  }
+  if(disp)disp.textContent=label;
+  closeSongPicker();
+}
 
 function buildPredigtRow(pos,p={}){
   return`<div class="ep-row prog-ep-row" data-type="predigt" draggable="true" ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dragDrop(event)" ondragend="dragEnd(event)">

@@ -4,7 +4,7 @@ const SB_KEY='sb_publishable_rTWG_fw_Us_yA4ZayeR9sw_glQ-rrP-';
 let SB=null, currentUser=null, currentProfile=null;
 let cachedSongs=[], cachedCategories=[], calView='3month', calDate=new Date();
 let editSongId=null, editEvId=null, editCalId=null;
-let songFilter={search:'',besetzung:'',thema:'',anlass:'',person:''};
+let songFilter={search:'',besetzung:'',tags:new Set(),person:''};
 let showAllSources=false;
 let mediaFilter='all';
 

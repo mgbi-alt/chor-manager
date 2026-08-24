@@ -37,25 +37,70 @@ function normalizeLabel(v){
   }).join(' ');
 }
 function dedupeLabels(raw){const seen=new Map();raw.filter(Boolean).forEach(v=>{const n=normalizeLabel(v);const k=n.toLowerCase();if(!seen.has(k))seen.set(k,n);});return [...seen.values()].sort((a,b)=>a.localeCompare(b,'de'));}
+// Fest-Kategorien: standardmäßig ausgeblendet
+const FEST_TAGS=new Set(['Advent','Weihnachten','Christi Geburt','Karfreitag','Passion','Ostern','Pfingsten','Himmelfahrt','Abendmahl','Erntedank','Neujahr','Hochzeit','Taufe']);
+let showFestTags=false;
+
 function buildFilters(){
-  const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))];
-  const the=dedupeLabels(cachedSongs.flatMap(s=>(s.thema||'').split(',').map(t=>t.trim())));
-  const anl=dedupeLabels(cachedSongs.flatMap(s=>(s.anlass||'').split(',').map(a=>a.trim())));
-  // Persons: all composer/arranger/etc names
-  const persons=[...new Set(cachedSongs.flatMap(s=>[s.komponist,s.textdichter,s.arrangeur,s.uebersetzer].filter(Boolean)))];
-  const el=document.getElementById('song-filters');el.innerHTML='';
-  const shownLabels=new Set();
-  const addGroup=(items,key)=>items.forEach(v=>{const vl=v.toLowerCase();if(key!=='besetzung'&&shownLabels.has(vl))return;shownLabels.add(vl);const c=document.createElement('div');c.className='fchip'+(songFilter[key]===v?' active':'');c.textContent=v;c.onclick=()=>{songFilter[key]=songFilter[key]===v?'':v;buildFilters();displaySongs(filteredSongs());updateFilterCount();};el.appendChild(c);});
-  addGroup(bes,'besetzung');addGroup(the,'thema');addGroup(anl,'anlass');
+  const bes=[...new Set(cachedSongs.map(s=>s.besetzung).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+  // Collect all tags from both thema and anlass, deduplicated
+  const allTagRaw=cachedSongs.flatMap(s=>[
+    ...(s.thema||'').split(',').map(t=>t.trim()),
+    ...(s.anlass||'').split(',').map(a=>a.trim())
+  ]);
+  const allTags=dedupeLabels(allTagRaw);
+
+  const el=document.getElementById('song-filters');
+  el.innerHTML='';
+
+  // Besetzung chips (single-select)
+  bes.forEach(v=>{
+    const c=document.createElement('div');
+    c.className='fchip'+(songFilter.besetzung===v?' active':'');
+    c.textContent=v;
+    c.onclick=()=>{songFilter.besetzung=songFilter.besetzung===v?'':v;buildFilters();displaySongs(filteredSongs());updateFilterCount();};
+    el.appendChild(c);
+  });
+
+  // Separator
+  if(bes.length){const sep=document.createElement('div');sep.style.cssText='width:100%;height:0;border-top:1px solid var(--border);margin:3px 0';el.appendChild(sep);}
+
+  // Tag chips (multi-select, OR logic)
+  const visibleTags=showFestTags?allTags:allTags.filter(t=>!FEST_TAGS.has(t));
+  visibleTags.forEach(v=>{
+    const c=document.createElement('div');
+    c.className='fchip'+(songFilter.tags.has(v)?' active':'');
+    c.textContent=v;
+    c.onclick=()=>{
+      if(songFilter.tags.has(v))songFilter.tags.delete(v);else songFilter.tags.add(v);
+      buildFilters();displaySongs(filteredSongs());updateFilterCount();
+    };
+    el.appendChild(c);
+  });
+
+  // Feste-Toggle
+  const festBtn=document.createElement('div');
+  festBtn.className='fchip';
+  festBtn.style.cssText='border-style:dashed;color:var(--text2);font-size:10px';
+  festBtn.textContent=showFestTags?'🎄 Feste ausblenden':'🎄 Feste einblenden';
+  festBtn.onclick=()=>{showFestTags=!showFestTags;buildFilters();};
+  el.appendChild(festBtn);
 }
+
 function filteredSongs(){
   const q=(document.getElementById('song-search')?.value||'').toLowerCase();
   return cachedSongs.filter(s=>{
     if(!showAllSources&&!s.in_repertoire)return false;
     if(q&&!['title','liedanfang','refrain','komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(q)))return false;
     if(songFilter.besetzung&&s.besetzung!==songFilter.besetzung)return false;
-    if(songFilter.thema&&!(s.thema||'').split(',').map(t=>normalizeLabel(t)).includes(songFilter.thema))return false;
-    if(songFilter.anlass&&!(s.anlass||'').split(',').map(a=>normalizeLabel(a)).includes(songFilter.anlass))return false;
+    if(songFilter.tags.size){
+      const sTags=[
+        ...(s.thema||'').split(',').map(t=>normalizeLabel(t.trim())),
+        ...(s.anlass||'').split(',').map(a=>normalizeLabel(a.trim()))
+      ];
+      // OR: mindestens ein aktiver Tag muss passen
+      if(![...songFilter.tags].some(t=>sTags.includes(t)))return false;
+    }
     if(songFilter.person){const p=songFilter.person.toLowerCase();if(!['komponist','textdichter','arrangeur','uebersetzer'].some(k=>(s[k]||'').toLowerCase().includes(p)))return false;}
     return true;
   }).sort((a,b)=>{
@@ -74,14 +119,14 @@ function toggleFilters(){
 }
 
 function updateFilterCount(){
-  const active=[songFilter.besetzung,songFilter.thema,songFilter.anlass,songFilter.person].filter(Boolean).length;
+  const active=(songFilter.besetzung?1:0)+songFilter.tags.size+(songFilter.person?1:0);
   const countEl=document.getElementById('filter-active-count');
   if(countEl){countEl.textContent=active;countEl.style.display=active?'':'none';}
 }
 function filterSongs(){displaySongs(filteredSongs());updateFilterCount();}
 function clearSongSearch(){
   document.getElementById('song-search').value='';
-  songFilter={search:'',besetzung:'',thema:'',anlass:'',person:''};
+  songFilter={search:'',besetzung:'',tags:new Set(),person:''};
   buildFilters();displaySongs(filteredSongs());updateFilterCount();
 }
 function clearEvSearch(){

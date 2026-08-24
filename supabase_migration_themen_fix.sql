@@ -3,21 +3,19 @@
 -- Ausführen im Supabase SQL-Editor
 -- ============================================================
 
--- Hilfsfunktion mit case-insensitivem Vergleich
 CREATE OR REPLACE FUNCTION _merge_csv_ci(val text, old_val text, new_val text)
 RETURNS text LANGUAGE sql AS $$
-  SELECT string_agg(part, ', ')
+  SELECT string_agg(mapped, ', ' ORDER BY min_pos)
   FROM (
-    SELECT DISTINCT
-      CASE WHEN lower(trim(part)) = lower(old_val) THEN new_val ELSE trim(part) END AS part,
-      min(pos) AS pos
-    FROM unnest(string_to_array(val, ',')) WITH ORDINALITY AS t(part, pos)
-    GROUP BY lower(CASE WHEN lower(trim(part)) = lower(old_val) THEN new_val ELSE trim(part) END)
-    ORDER BY min(pos)
+    SELECT
+      CASE WHEN lower(trim(raw)) = lower(old_val) THEN new_val ELSE trim(raw) END AS mapped,
+      min(pos) AS min_pos
+    FROM unnest(string_to_array(val, ',')) WITH ORDINALITY AS t(raw, pos)
+    GROUP BY CASE WHEN lower(trim(raw)) = lower(old_val) THEN new_val ELSE trim(raw) END
   ) sub
 $$;
 
--- Verbleibende Zusammenführungen im THEMA-Feld
+-- Thema-Feld
 DO $$
 DECLARE
   merges text[][] := ARRAY[
@@ -41,7 +39,7 @@ BEGIN
   END LOOP;
 END $$;
 
--- Verbleibende Zusammenführungen im ANLASS-Feld
+-- Anlass-Feld
 DO $$
 DECLARE
   merges text[][] := ARRAY[

@@ -1022,24 +1022,32 @@ async function saveEditMember(){
   if(pass&&pass!==pass2){T('Passwörter stimmen nicht überein','err');return;}
   if(pass&&pass.length<6){T('Passwort min. 6 Zeichen','err');return;}
   const emailChanged=email&&email!==_editMemberOrigEmail;
-  const{data:{session}}=await SB.auth.getSession();
-  const token=session?.access_token;
-  // Alles über die Edge Function (Service Role umgeht RLS)
-  let res;
-  try{
-    res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body:JSON.stringify({
-        userId:_editMemberId,
-        profile:{name,phone,stimme,role2,email:emailChanged?email:undefined},
-        email:emailChanged?email:undefined,
-        password:pass||undefined
-      })
-    });
-  }catch(e){T('Edge Function nicht erreichbar – bitte im Supabase Dashboard deployen','err');return;}
-  const json=await res.json().catch(()=>({}));
-  if(!res.ok){T('Fehler: '+(json.error||res.statusText||res.status),'err');return;}
+  const needsEdgeFn=emailChanged||!!pass;
+
+  // Profilfelder direkt in profiles-Tabelle speichern (RLS-Policy erlaubt Admin-Update)
+  const{error:profErr}=await SB.from('profiles').update({name,phone,stimme,role2}).eq('id',_editMemberId);
+  if(profErr){T('Fehler beim Speichern: '+profErr.message,'err');return;}
+
+  // E-Mail / Passwort nur über Edge Function (braucht Service Role)
+  if(needsEdgeFn){
+    const{data:{session}}=await SB.auth.getSession();
+    const token=session?.access_token;
+    let res;
+    try{
+      res=await fetch(SB_URL+'/functions/v1/admin-update-auth',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({
+          userId:_editMemberId,
+          email:emailChanged?email:undefined,
+          password:pass||undefined
+        })
+      });
+    }catch(e){T('Profil gespeichert – E-Mail/Passwort konnte nicht geändert werden (Edge Function nicht erreichbar)','warn');closeModal('m-edit-member');renderSettings('members');return;}
+    const json=await res.json().catch(()=>({}));
+    if(!res.ok){T('Profil gespeichert – E-Mail/Passwort-Fehler: '+(json.error||res.status),'warn');closeModal('m-edit-member');renderSettings('members');return;}
+  }
+
   closeModal('m-edit-member');
   renderSettings('members');
   T('Gespeichert','ok');

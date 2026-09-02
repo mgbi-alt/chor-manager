@@ -200,7 +200,8 @@ alter publication supabase_realtime add table events;
 -- VIEW: Lied-Aufführungsstatistik
 -- (für Auswertungen / Analytics verwendet)
 -- ============================================================
-create or replace view public.song_performance_stats as
+create or replace view public.song_performance_stats
+with (security_invoker = true) as
 select
   s.id as song_id,
   s.title,

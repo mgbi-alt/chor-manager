@@ -15,6 +15,26 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'No auth' }), { status: 401, headers: corsHeaders })
+    }
+
+    // Aufrufer muss eingeloggt UND Admin sein
+    const caller = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    )
+    const { data: { user } } = await caller.auth.getUser()
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
+    }
+    const { data: callerProfile } = await caller.from('profiles').select('role').eq('id', user.id).single()
+    if (callerProfile?.role !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Admin required' }), { status: 403, headers: corsHeaders })
+    }
+
     const { title, body, url, badgeCount } = await req.json()
 
     // Service-Role-Key → umgeht RLS, liest alle Subscriptions

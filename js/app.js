@@ -65,16 +65,9 @@ document.getElementById('app-version').textContent='v'+APP_VERSION;
 function startApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  const p=currentProfile||{};
-  document.getElementById('tb-name').textContent=p.name||'';
-  document.getElementById('tb-av').textContent=initials(p.name)||'?';
-  const isAdmin=p.role==='admin';
-  if(isAdmin)document.getElementById('ni-settings').style.display='flex';
-  if(can('songs_edit'))['song-add-btn','song-ai-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
-  if(can('events_edit'))['ev-add-btn','ev-chat-btn','ev-export-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
-  if(isAdmin)['ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
-  const niStats=document.getElementById('ni-stats');if(niStats)niStats.style.display=can('tab_stats')?'':'none';
-  const niMedia=document.getElementById('ni-media');if(niMedia)niMedia.style.display=can('tab_media')?'':'none';
+  realProfile=currentProfile; viewAsId=null; // echte Identitaet merken
+  applyRoleUI();
+  fillViewAs();
   SB.channel('rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>{loadUnread();if(document.getElementById('page-ann').classList.contains('active'))renderAnn();}).subscribe();
   // Track last seen
   SB.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',currentUser.id).then(()=>{});
@@ -82,6 +75,54 @@ function startApp(){
   setupPush();
   loadAutocompleteLists();
   showPage('dashboard');
+}
+
+// ========== ROLLEN-UI / ANSICHT-ALS ==========
+// Zeigt/versteckt alle rollenabhaengigen Bedienelemente anhand von currentProfile.
+// Wird beim Start und bei jedem Wechsel der "Ansicht als"-Auswahl aufgerufen.
+function applyRoleUI(){
+  const p=currentProfile||{};
+  const isAdmin=p.role==='admin';
+  document.getElementById('tb-name').textContent=p.name||'';
+  document.getElementById('tb-av').textContent=initials(p.name)||'?';
+  const show=(id,on,disp='')=>{const el=document.getElementById(id);if(el)el.style.display=on?disp:'none';};
+  show('ni-settings',isAdmin,'flex');
+  ['song-add-btn','song-ai-btn'].forEach(id=>show(id,can('songs_edit')));
+  ['ev-add-btn','ev-chat-btn','ev-export-btn'].forEach(id=>show(id,can('events_edit')));
+  ['ev-import-btn','ann-add-btn','cal-add-btn','media-add-btn','media-album-btn'].forEach(id=>show(id,isAdmin));
+  show('ni-stats',can('tab_stats'));
+  show('ni-media',can('tab_media'));
+}
+
+// Befuellt die "Ansicht als"-Auswahl (nur fuer echte Admins sichtbar).
+async function fillViewAs(){
+  const sel=document.getElementById('viewas-sel');
+  if(!sel) return;
+  if(realProfile?.role!=='admin'){ sel.hidden=true; return; }
+  if(!allProfilesCache.length){
+    const{data}=await SB.from('profiles').select('id,name,role,role2,stimme,email').order('name');
+    allProfilesCache=data||[];
+  }
+  const opts=['<option value="">Ansicht: Admin (ich)</option>']
+    .concat(allProfilesCache.filter(m=>m.id!==realProfile.id).map(m=>{
+      const extra=m.role==='admin'?'Admin':((m.role2||'').includes('dirigent')?'Dirigent':(m.role2||'').includes('klavier')?'Klavier':'Mitglied');
+      return `<option value="${m.id}" ${m.id===viewAsId?'selected':''}>als ${esc(m.name)} (${extra})</option>`;
+    }));
+  sel.innerHTML=opts.join('');
+  sel.hidden=false;
+}
+
+// Wechselt die Vorschau-Identitaet. Rein clientseitig: die Datenbank setzt
+// weiterhin die Rechte des echten (Admin-)Logins per RLS durch.
+function setViewAs(id){
+  if(realProfile?.role!=='admin') return;
+  viewAsId=id||null;
+  currentProfile=viewAsId ? (allProfilesCache.find(m=>m.id===viewAsId)||realProfile) : realProfile;
+  applyRoleUI();
+  const sel=document.getElementById('viewas-sel');
+  if(sel){sel.style.borderColor=viewAsId?'var(--accent)':'var(--border)';sel.style.color=viewAsId?'var(--accent)':'var(--text2)';}
+  showPage('dashboard');
+  if(viewAsId) T('Vorschau als '+currentProfile.name+' – nur Ansicht','ok');
 }
 
 // ========== SCROLL UX ==========

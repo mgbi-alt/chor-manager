@@ -2,6 +2,7 @@
 const SB_URL='https://nzgmznxwtvmjatbhbmcp.supabase.co';
 const SB_KEY='sb_publishable_rTWG_fw_Us_yA4ZayeR9sw_glQ-rrP-';
 let SB=null, currentUser=null, currentProfile=null;
+let realProfile=null, viewAsId=null, allProfilesCache=[]; // Admin-Ansicht als anderes Mitglied (nur clientseitige Vorschau)
 let cachedSongs=[], cachedCategories=[], calView='3month', calDate=new Date();
 let editSongId=null, editEvId=null, editCalId=null;
 let songFilter={search:'',besetzung:'',tags:new Set(),person:''};
@@ -86,6 +87,6 @@ async function doLogin(){
   if(currentProfile?.active===false){await SB.auth.signOut();currentUser=null;currentProfile=null;err.textContent='Konto deaktiviert. Bitte Admin kontaktieren.';err.style.display='block';return;}
   startApp();
 }
-async function doLogout(){await SB.auth.signOut();currentUser=null;currentProfile=null;document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
+async function doLogout(){await SB.auth.signOut();currentUser=null;currentProfile=null;realProfile=null;viewAsId=null;allProfilesCache=[];document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
 async function loadProfile(user){currentUser=user;const{data}=await SB.from('profiles').select('*').eq('id',user.id).single();currentProfile=data;}
 

@@ -1,5 +1,6 @@
 // ========== PROFILE ==========
 function openProfile(){
+  if(viewAsId){T('Vorschau-Modus aktiv – erst Ansicht auf „Admin (ich)" zurücksetzen','err');return;}
   const p=currentProfile||{};const parts=(p.name||'').split(' ');const vname=parts[0]||'';const nname=parts.slice(1).join(' ')||'';
   document.getElementById('prof-body').innerHTML=`
     <div class="fs"><div class="fst">Persönliche Daten</div>

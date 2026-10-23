@@ -75,10 +75,13 @@
       <h1>♪ Cantamus</h1>
       <span id="app-version" style="font-size:10px;color:var(--text3);letter-spacing:.03em"></span>
     </div>
-    <div class="ub" onclick="openProfile()">
-      <div class="av" id="tb-av">?</div>
-      <span class="ub-name" id="tb-name"></span>
-      <div class="ndot" id="ndot" style="display:none"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <select id="viewas-sel" hidden onchange="setViewAs(this.value)" title="Ansicht als Mitglied (nur Vorschau)" style="max-width:150px;font-size:12px;padding:4px 6px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--card);color:var(--text2)"></select>
+      <div class="ub" onclick="openProfile()">
+        <div class="av" id="tb-av">?</div>
+        <span class="ub-name" id="tb-name"></span>
+        <div class="ndot" id="ndot" style="display:none"></div>
+      </div>
     </div>
   </div>
   <div id="content">

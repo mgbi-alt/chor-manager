@@ -921,6 +921,7 @@ async function renderSettings(tab='members'){
         </div>
         <div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">
           <button class="btn btn-g btn-sm" onclick="openEditMember(${JSON.stringify(m).replace(/"/g,'&quot;')})">✏️ Bearbeiten</button>
+          ${m.email?`<button class="btn btn-g btn-sm" onclick="sendWelcomeMail('${m.id}')">✉️ Willkommensmail</button>`:''}
           ${!isMe?`<button class="btn btn-g btn-sm" onclick="toggleMemberRole('${m.id}','${m.role}')">${m.role==='admin'?'Zu Mitglied':'Zu Admin'}</button>`:''}
           ${!isMe?`<button class="btn ${isActive?'btn-d':'btn-i'} btn-sm" onclick="toggleActive('${m.id}',${isActive})">${isActive?'Deaktivieren':'Aktivieren'}</button>`:''}
         </div>
@@ -953,6 +954,40 @@ async function deleteCat(id){if(!confirm('Kategorie löschen?'))return;await SB.
 async function toggleMemberRole(id,role){const nr=role==='admin'?'member':'admin';if(!confirm(`Rolle zu "${nr==='admin'?'Admin':'Mitglied'}" wechseln?`))return;await SB.from('profiles').update({role:nr}).eq('id',id);renderSettings('members');T('Rolle geändert','ok');}
 async function toggleRole2(id,current){const opts=['','dirigent','klavier','dirigent,klavier'];const labels=['Keine','Dirigent','Klavier','Dirigent & Klavier'];const cur=opts.indexOf(current);const next=(cur+1)%opts.length;await SB.from('profiles').update({role2:opts[next]||null}).eq('id',id);renderSettings('members');T(`Zusatzrolle: ${labels[next]}`,'ok');}
 async function toggleActive(id,isActive){if(!confirm(isActive?'Mitglied deaktivieren?':'Mitglied aktivieren?'))return;await SB.from('profiles').update({active:!isActive}).eq('id',id);renderSettings('members');T(isActive?'Deaktiviert':'Aktiviert','ok');}
+
+// Erzeugt ein starkes Zufallspasswort (kryptographisch sicher).
+function genWelcomePassword(){
+  const U='ABCDEFGHJKLMNPQRSTUVWXYZ',L='abcdefghijkmnpqrstuvwxyz',D='23456789',S='!@#$%&*?-';
+  const all=U+L+D+S;
+  const rnd=n=>{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n;};
+  const pick=s=>s[rnd(s.length)];
+  const ch=[pick(U),pick(L),pick(D),pick(S)];
+  for(let i=0;i<8;i++)ch.push(pick(all));
+  for(let i=ch.length-1;i>0;i--){const j=rnd(i+1);[ch[i],ch[j]]=[ch[j],ch[i]];}
+  return ch.join('');
+}
+// Setzt per Edge Function (admin-update-auth) ein neues Zufallspasswort und
+// oeffnet einen vorausgefuellten Mail-Entwurf. Der Admin prueft und verschickt
+// selbst – es wird hier nichts automatisch versendet.
+async function sendWelcomeMail(id){
+  const{data:m}=await SB.from('profiles').select('name,email').eq('id',id).single();
+  if(!m?.email){T('Keine E-Mail hinterlegt','err');return;}
+  const email=m.email, vorname=(m.name||'').split(' ')[0];
+  if(!confirm(`Für ${email} ein neues Passwort setzen und eine Willkommensmail vorbereiten?\n\nEin eventuell vorhandenes altes Passwort wird dabei ungültig.`))return;
+  const pw=genWelcomePassword();
+  const{data,error}=await SB.functions.invoke('admin-update-auth',{body:{userId:id,password:pw}});
+  if(error){
+    let msg=error.message;
+    try{const b=await error.context.json();if(b?.error)msg=b.error;}catch(_){}
+    T('Fehler: '+msg,'err');return;
+  }
+  if(data?.error){T('Fehler: '+data.error,'err');return;}
+  const appUrl=location.origin+location.pathname;
+  const subject='Willkommen bei Cantamus – deine Zugangsdaten';
+  const body=`Hallo ${vorname||''},\n\nherzlich willkommen bei Cantamus! Du kannst dich ab sofort mit folgenden Zugangsdaten anmelden:\n\nApp-Link: ${appUrl}\nBenutzername (E-Mail): ${email}\nPasswort: ${pw}\n\nBitte melde dich damit an und vergib dir danach über dein Profil (oben rechts auf deinen Namen tippen) unter „Neues Passwort" ein eigenes, nur dir bekanntes Passwort.\n\nViele Grüße`;
+  window.location.href=`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  T('Passwort gesetzt, Mail-Entwurf geöffnet','ok');
+}
 async function applyTabPerm(tabKey,enabled,memberIds){
   if(!memberIds.length){T('Keine Mitglieder in dieser Gruppe','err');return;}
   const{data:{session}}=await SB.auth.getSession();
